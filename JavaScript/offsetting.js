@@ -1077,7 +1077,7 @@ class CubicCurve {
             minx <= this.P2.X &&
             miny <= this.P2.Y &&
             this.P2.X <= maxx &&
-            this.P2.Y <= maxx &&
+            this.P2.Y <= maxy &&
             // Is P3 located between P1 and P4?
             minx <= this.P3.X &&
             miny <= this.P3.Y &&

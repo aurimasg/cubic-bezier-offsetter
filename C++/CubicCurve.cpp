@@ -45,7 +45,7 @@ bool CubicCurve::IsStraight(const double epsilon) const
         minx <= P2.X and
         miny <= P2.Y and
         P2.X <= maxx and
-        P2.Y <= maxx and
+        P2.Y <= maxy and
         // Is P3 located between P1 and P4?
         minx <= P3.X and
         miny <= P3.Y and

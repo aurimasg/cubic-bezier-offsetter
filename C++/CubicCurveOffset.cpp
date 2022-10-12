@@ -129,7 +129,7 @@ static constexpr double ArcProbePositions[] = {
 static constexpr double SimpleOffsetProbePositions[] = {
     0.25,
     0.5,
-    0.85
+    0.75
 };
 
 

@@ -22,7 +22,7 @@ static constexpr int NearCuspPointSearchMaxIterationCount = 18;
  *
  * Smaller value means smaller curves will be accepted for output.
  */
-static constexpr double MaximumTinyCurvePolygonPerimeterSquared = 1e-6;
+static constexpr double MaximumTinyCurvePolygonPerimeterSquared = 1e-7;
 
 
 /**
@@ -33,23 +33,69 @@ static constexpr double MaximumTinyCurvePolygonPerimeterSquared = 1e-6;
  *
  * Smaller value means smaller arcs will be accepted for output.
  */
-static constexpr double MinimumArcRadius = 1e-6;
+static constexpr double MinimumArcRadius = 1e-8;
+
+
+/**
+ * An upper limit of arc radius. Circular arcs with calculated radius greater
+ * than this value will not be considered as accepted approximations of curve
+ * segments.
+ */
+static constexpr double MaximumArcRadius = 1e+6;
 
 
 /**
  * Offsetter does not attempt to find exact cusp locations and does not
  * consider cusp only to be where derivative vector length is exactly zero.
- * This value is a scale value for finding maximum length of derivative vector
- * which will be used for cusp detection.
- *
- * First squared distances of lines P1 → P2, P2 → P3 and P3 → P4 are added
- * together and multiplied by this scale value. Then, if point on curve has
- * derivative vector length equal to or less than the calculated value, that
- * point will be considered as cusp and is processed accordingly.
  *
  * Smaller values means that sharper curve edges are considered cusps.
  */
-static constexpr double CuspDerivativeLengthScale = 3e-5;
+static constexpr double CuspDerivativeLengthSquared = 1.5e-4;
+
+
+/**
+ * If X and Y components of all points are equal when compared with this
+ * epsilon, curve is considered a point.
+ */
+static constexpr double CurvePointClumpTestEpsilon = 1e-14;
+
+
+/**
+ * Epsilon used to compare coordinates of circular arc centers to see if they
+ * can be merged into a single circular arc.
+ */
+static constexpr double ArcCenterComparisonEpsilon = 1e-8;
+
+
+/**
+ * When testing if curve is almost straight, cross products of unit vectors
+ * are calculated as follows
+ *
+ *     Turn1 = (P1 → P2) ⨯ (P1 → P4)
+ *     Turn2 = (P2 → P3) ⨯ (P1 → P4)
+ *
+ * Where P1, P2, P3 and P4 are curve points and (X → Y) are unit vectors going
+ * from X to a direction of Y.
+ *
+ * Then these values are compared with zero. If they both are close to zero,
+ * curve is considered approximately straight. This is the epsilon used for
+ * comparing Turn1 and Turn2 values to zero.
+ *
+ * Bigger value means less straight curves are considered approximately
+ * straight.
+ */
+static constexpr double ApproximatelyStraightCurveTestApsilon = 1e-5;
+
+
+/**
+ * The logic is the same as for ApproximatelyStraightCurveTestApsilon value.
+ * This value is used to determine if curve is completely straight, not just
+ * approximately straight.
+ *
+ * Bigger value means less straight curves are considered completely straight.
+ * This value should be smaller than ApproximatelyStraightCurveTestApsilon.
+ */
+static constexpr double CompletelyStraightCurveTestApsilon = 1e-15;
 
 
 /**
@@ -81,38 +127,83 @@ static constexpr double ArcProbePositions[] = {
  * increases the time spent for testing if candidate is good.
  */
 static constexpr double SimpleOffsetProbePositions[] = {
-    0.2,
+    0.25,
     0.5,
-    0.8
+    0.85
 };
 
 
-static void MoveTo(CubicCurveBuilder &builder, const FloatPoint &to)
+/**
+ * Keeps data needed to generate a set of output segments.
+ */
+struct OutputBuilder final {
+    constexpr OutputBuilder(CubicCurveBuilder &builder, const double scale,
+        const FloatPoint &translation)
+    :   Builder(builder),
+        Scale(scale),
+        Translation(translation)
+    {
+    }
+
+    CubicCurveBuilder &Builder;
+    FloatPoint PreviousPoint;
+    FloatPoint PreviousPointT;
+    FloatPoint CuspPoint;
+    bool NeedsCuspArc = false;
+    bool CuspArcClockwise = false;
+    const double Scale = 1;
+    const FloatPoint Translation;
+};
+
+
+/**
+ * Called once when the first point of output is calculated.
+ */
+static void MoveTo(OutputBuilder &builder, const FloatPoint &to)
 {
-    builder.MoveTo(to);
     builder.PreviousPoint = to;
+    builder.PreviousPointT = (to * builder.Scale) + builder.Translation;
 }
 
 
-static void LineTo(CubicCurveBuilder &builder, const FloatPoint &to)
+/**
+ * Called when a new line needs to be added to the output. Line starts at the
+ * last point of previously added segment or point set by a call to MoveTo.
+ */
+static void LineTo(OutputBuilder &builder, const FloatPoint &to)
 {
     const FloatPoint previous = builder.PreviousPoint;
 
     if (previous != to) {
-        builder.LineTo(to);
+        const FloatPoint t = (to * builder.Scale) + builder.Translation;
+
+        builder.Builder.AddLine(builder.PreviousPointT, t);
+
         builder.PreviousPoint = to;
+        builder.PreviousPointT = t;
     }
 }
 
 
-static void CubicTo(CubicCurveBuilder &builder, const FloatPoint &cp1,
+/**
+ * Called when a new cubic curve needs to be added to the output. Curve starts
+ * at the last point of previously added segment or point set by a call to
+ * MoveTo.
+ */
+static void CubicTo(OutputBuilder &builder, const FloatPoint &cp1,
     const FloatPoint &cp2, const FloatPoint &to)
 {
     const FloatPoint previous = builder.PreviousPoint;
 
     if (previous != cp1 or previous != cp2 or previous != to) {
-        builder.CubicTo(cp1, cp2, to);
+        const FloatPoint c1 = (cp1 * builder.Scale) + builder.Translation;
+        const FloatPoint c2 = (cp2 * builder.Scale) + builder.Translation;
+        const FloatPoint t = (to * builder.Scale) + builder.Translation;
+
+        builder.Builder.AddCubic(builder.PreviousPointT, c1, c2, t);
+
         builder.PreviousPoint = to;
+        builder.PreviousPointT = t;
     }
 }
 
@@ -147,7 +238,12 @@ static CubicCurve FindUnitCubicCurveForArc(const FloatPoint &p1,
 }
 
 
-static void ArcTo(CubicCurveBuilder &builder, const FloatPoint &center,
+/**
+ * Called when a circular arc needs to be added to the output. Arc starts at
+ * the last point of previously added segment or point set by a call to MoveTo
+ * and goes to a given end point.
+ */
+static void ArcTo(OutputBuilder &builder, const FloatPoint &center,
     const FloatPoint &to, const bool clockwise)
 {
     const FloatPoint arcFrom = builder.PreviousPoint;
@@ -217,29 +313,56 @@ static void ArcTo(CubicCurveBuilder &builder, const FloatPoint &center,
 }
 
 
-static double FindCubicPrecision(const CubicCurve &curve)
+template <typename Function>
+static void MaybeAddCuspArcWithFunction(OutputBuilder &builder,
+    const Function toPointFunction)
 {
-    return (
-        curve.P1.DistanceToSquared(curve.P2) +
-        curve.P2.DistanceToSquared(curve.P3) +
-        curve.P3.DistanceToSquared(curve.P4)) * CuspDerivativeLengthScale;
+    if (builder.NeedsCuspArc) {
+        builder.NeedsCuspArc = false;
+
+        ArcTo(builder, builder.CuspPoint, toPointFunction(),
+            builder.CuspArcClockwise);
+
+        builder.CuspPoint = FloatPoint();
+        builder.CuspArcClockwise = false;
+    }
 }
 
 
+static void MaybeAddCuspArc(OutputBuilder &builder, const FloatPoint &toPoint)
+{
+    MaybeAddCuspArcWithFunction(builder, [toPoint]() -> FloatPoint {
+        return toPoint;
+    });
+}
+
+
+/**
+ * Returns true if the curve is close enough to be considered parallel to the
+ * original curve.
+ *
+ * @param original The original curve.
+ *
+ * @param parallel Candidate parallel curve to be tested.
+ *
+ * @param offset Offset from original curve to candidate parallel curve.
+ *
+ * @param maximumError Maximum allowed error.
+ */
 static bool AcceptOffset(const CubicCurve &original,
-    const CubicCurve &translated, const double offset,
+    const CubicCurve &parallel, const double offset,
     const double maximumError)
 {
     // Using shape control method, sometimes output curve becomes completely
     // off in some situations involving start and end tangents being almost
     // parallel. These two checks are to prevent accepting such curves as good.
     if (FloatPoint::IsTriangleClockwise(original.P1, original.P2, original.P4) !=
-        FloatPoint::IsTriangleClockwise(translated.P1, translated.P2, translated.P4)) {
+        FloatPoint::IsTriangleClockwise(parallel.P1, parallel.P2, parallel.P4)) {
         return false;
     }
 
     if (FloatPoint::IsTriangleClockwise(original.P1, original.P3, original.P4) !=
-        FloatPoint::IsTriangleClockwise(translated.P1, translated.P3, translated.P4)) {
+        FloatPoint::IsTriangleClockwise(parallel.P1, parallel.P3, parallel.P4)) {
         return false;
     }
 
@@ -250,14 +373,14 @@ static bool AcceptOffset(const CubicCurve &original,
         const FloatPoint p0 = original.PointAt(t);
         const FloatPoint n = original.NormalVector(t);
 
-        const int nRoots = translated.FindRayIntersections(p0, p0 + n,
+        const int nRoots = parallel.FindRayIntersections(p0, p0 + n,
             intersections);
 
         if (nRoots != 1) {
             return false;
         }
 
-        const FloatPoint p1 = translated.PointAt(*intersections);
+        const FloatPoint p1 = parallel.PointAt(*intersections);
         const double d = p0.DistanceTo(p1);
         const double error = Abs(d - Abs(offset));
 
@@ -270,15 +393,10 @@ static bool AcceptOffset(const CubicCurve &original,
 }
 
 
-static void ArcOffset(CubicCurveBuilder &builder, const double offset,
-    const FloatPoint &center, const FloatPoint &from, const FloatPoint &to)
+static void ArcOffset(OutputBuilder &builder, const double offset,
+    const FloatPoint &center, const FloatPoint &from, const FloatPoint &to,
+    const bool clockwise)
 {
-    const TrianglePointOrientation orientation = FloatPoint::DetermineTriangleOrientation(center, from, to);
-
-    ASSERT(orientation != TrianglePointOrientation::Collinear);
-
-    const bool clockwise = orientation == TrianglePointOrientation::Clockwise;
-
     FloatLine line(center, to);
 
     if (clockwise) {
@@ -287,9 +405,7 @@ static void ArcOffset(CubicCurveBuilder &builder, const double offset,
         line.ExtendByLengthFront(-offset);
     }
 
-    if (builder.NeedsCuspArc) {
-        builder.NeedsCuspArc = false;
-
+    MaybeAddCuspArcWithFunction(builder, [center, from, offset, clockwise]() -> FloatPoint {
         FloatLine l2(center, from);
 
         if (clockwise) {
@@ -298,39 +414,88 @@ static void ArcOffset(CubicCurveBuilder &builder, const double offset,
             l2.ExtendByLengthFront(-offset);
         }
 
-        ArcTo(builder, builder.CuspPoint, l2.P2, builder.CuspArcClockwise);
-
-        builder.CuspPoint = FloatPoint();
-        builder.CuspArcClockwise = false;
-    }
+        return l2.P2;
+    });
 
     ArcTo(builder, center, line.P2, clockwise);
 }
 
 
 /**
- * Returns true if start and end tangents of a curve do not point to the
- * opposite sides of line connecting start and end points of a curve.
- *
- * @param startTangent The start tangent of a curve. P1 is the first point of
- * a curve and P2 is point P2, P3 or P4 of a curve, depending which is the
- * first point not equal to the first point of a curve.
- *
- * @param endTangent The end tangent of a curve. P1 is the last point of a
- * curve and P2 is point P3, P2 or P1 of a curve, depending which is the
- * first point not equal to the last point of a curve.
+ * Represents curve tangents as two line segments and some precomputed data.
  */
-static bool TangentsSameSide(const FloatLine &startTangent,
-    const FloatLine &endTangent)
+struct CurveTangentData final {
+    explicit CurveTangentData(const CubicCurve &curve);
+
+    const FloatLine StartTangent;
+    const FloatLine EndTangent;
+    const double Turn1 = 0;
+    const double Turn2 = 0;
+    const FloatPoint StartUnitNormal;
+    const FloatPoint EndUnitNormal;
+};
+
+
+static double UnitTurn(const FloatPoint &point1, const FloatPoint &point2,
+    const FloatPoint &point3)
 {
-    const double turn0 = FloatPoint::Turn(startTangent.P1, startTangent.P2,
-        endTangent.P1);
+    return ((point2 - point1).UnitVector()).Cross((point3 - point1).UnitVector());
+}
 
-    const double turn1 = FloatPoint::Turn(startTangent.P1, endTangent.P2,
-        endTangent.P1);
 
-    return FuzzyIsZero(turn0) || FuzzyIsZero(turn1) ||
-        ((turn0 < 0.0) == (turn1 < 0.0));
+CurveTangentData::CurveTangentData(const CubicCurve &curve)
+:   StartTangent(curve.StartTangent()),
+    EndTangent(curve.EndTangent()),
+    Turn1(UnitTurn(StartTangent.P1, StartTangent.P2, EndTangent.P1)),
+    Turn2(UnitTurn(StartTangent.P1, EndTangent.P2, EndTangent.P1)),
+    StartUnitNormal(StartTangent.UnitNormalVector()),
+    EndUnitNormal(EndTangent.UnitNormalVector())
+{
+}
+
+
+/**
+ * Returns true if an attempt to approximate a curve with given tangents
+ * should be made.
+ */
+static bool CanTryArcOffset(const CurveTangentData &d)
+{
+    // Arc approximation is only attempted if curve is not considered
+    // approximately straight. But it can be attemped for curves which have
+    // their control points on the different sides of line connecting points
+    // P1 and P4.
+    //
+    // We need to make sure we don't try to do arc approximation for these S
+    // type curves because such curves cannot be approximated by arcs in such
+    // cases.
+
+    static constexpr double P = ApproximatelyStraightCurveTestApsilon;
+    static constexpr double N = -P;
+
+    return
+        (d.Turn1 >= P and d.Turn2 >= P) or
+        (d.Turn1 <= N and d.Turn2 <= N);
+}
+
+
+/**
+ * Returns true if an attempt to use simple offsetting for a curve with given
+ * tangents should be made.
+ */
+static bool CanTrySimpleOffset(const CurveTangentData &d)
+{
+    // Arc approximation is only attempted if curve is not considered
+    // approximately straight. But it can be attemped for curves which have
+    // their control points on the different sides of line connecting points
+    // P1 and P4.
+    //
+    // We need to make sure we don't try to do arc approximation for these S
+    // type curves because the shape control method behaves really badly with
+    // S shape curves.
+
+    return
+        (d.Turn1 >= 0 and d.Turn2 >= 0) or
+        (d.Turn1 <= 0 and d.Turn2 <= 0);
 }
 
 
@@ -348,14 +513,15 @@ static bool CurveIsTooTiny(const CubicCurve &curve)
 }
 
 
+/**
+ * Attempts to perform simple curve offsetting and returns true if it succeeds
+ * to generate good enough parallel curve.
+ */
 static bool TrySimpleCurveOffset(const CubicCurve &curve,
-    CubicCurveBuilder &builder, const double offset,
+    const CurveTangentData &d, OutputBuilder &builder, const double offset,
     const double maximumError)
 {
-    const FloatLine startTangent = curve.StartTangent();
-    const FloatLine endTangent = curve.EndTangent();
-
-    if (!TangentsSameSide(startTangent, endTangent)) {
+    if (!CanTrySimpleOffset(d)) {
         return false;
     }
 
@@ -368,10 +534,12 @@ static bool TrySimpleCurveOffset(const CubicCurve &curve,
     }
 
     // Start point.
-    const FloatPoint p1 = startTangent.P1 + (startTangent.UnitNormalVector() * offset);
+    const FloatPoint p1 = d.StartTangent.P1 +
+        (d.StartTangent.UnitNormalVector() * offset);
 
     // End point.
-    const FloatPoint p4 = endTangent.P1 - (endTangent.UnitNormalVector() * offset);
+    const FloatPoint p4 = d.EndTangent.P1 -
+        (d.EndTangent.UnitNormalVector() * offset);
 
     // Middle point.
     const FloatPoint mp = curve.PointAt(0.5);
@@ -397,14 +565,7 @@ static bool TrySimpleCurveOffset(const CubicCurve &curve,
         return false;
     }
 
-    if (builder.NeedsCuspArc) {
-        builder.NeedsCuspArc = false;
-
-        ArcTo(builder, builder.CuspPoint, candidate.P1, builder.CuspArcClockwise);
-
-        builder.CuspPoint = FloatPoint();
-        builder.CuspArcClockwise = false;
-    }
+    MaybeAddCuspArc(builder, candidate.P1);
 
     CubicTo(builder, candidate.P2, candidate.P3, candidate.P4);
 
@@ -413,12 +574,12 @@ static bool TrySimpleCurveOffset(const CubicCurve &curve,
 
 
 static bool DoubleArrayContainsMergePosition(const double *a, const int count,
-    const double value)
+    const double value, const double epsilon)
 {
     for (int i = 0; i < count; i++) {
         const double v = a[i];
 
-        if (IsEqualWithEpsilon(value, v, 1e-7)) {
+        if (IsEqualWithEpsilon(value, v, epsilon)) {
             return true;
         }
     }
@@ -428,22 +589,22 @@ static bool DoubleArrayContainsMergePosition(const double *a, const int count,
 
 
 static int MergeCurvePositions(double t[5], const int t_count, const double *s,
-    const int count)
+    const int count, const double epsilon)
 {
     int rc = t_count;
 
     for (int i = 0; i < count; i++) {
         const double v = s[i];
 
-        if (IsZeroWithEpsilon(v, 1e-7)) {
+        if (IsZeroWithEpsilon(v, epsilon)) {
             continue;
         }
 
-        if (IsEqualWithEpsilon(v, 1.0, 1e-7)) {
+        if (IsEqualWithEpsilon(v, 1.0, epsilon)) {
             continue;
         }
 
-        if (DoubleArrayContainsMergePosition(t, rc, v)) {
+        if (DoubleArrayContainsMergePosition(t, rc, v, epsilon)) {
             continue;
         }
 
@@ -451,25 +612,6 @@ static int MergeCurvePositions(double t[5], const int t_count, const double *s,
     }
 
     return rc;
-}
-
-
-static void ApproximateBezier(const CubicCurve &curve,
-    CubicCurveBuilder &builder, const double offset,
-    const double maximumError);
-
-
-static void SplitAndRecurse(const CubicCurve &curve,
-    CubicCurveBuilder &builder, const double offset,
-    const double maximumError)
-{
-    CubicCurve a;
-    CubicCurve b;
-
-    curve.Split(a, b);
-
-    ApproximateBezier(a, builder, offset, maximumError);
-    ApproximateBezier(b, builder, offset, maximumError);
 }
 
 
@@ -525,10 +667,16 @@ static bool GoodArc(const FloatPoint &arcCenter, const double arcRadius,
     const CubicCurve &curve, const double maximumError,
     const double tFrom, const double tTo)
 {
+    if (arcRadius > MaximumArcRadius) {
+        return false;
+    }
+
+    const double e = Min(maximumError, arcRadius / 3.0);
+
     // Calculate value equal to slightly more than half of maximum error.
     // Slightly more to minimize false negatives due to finite precision in
     // circle-line intersection test.
-    const double me = (maximumError * (0.5 + 1e-4));
+    const double me = (e * (0.5 + 1e-4));
 
     for (int i = 0; i < ARRAY_SIZE(ArcProbePositions); i++) {
         const double t = ArcProbePositions[i];
@@ -559,19 +707,16 @@ static bool GoodArc(const FloatPoint &arcCenter, const double arcRadius,
  * Attempts to use circular arc offsetting method on a given curve.
  */
 static bool TryArcApproximation(const CubicCurve &curve,
-    CubicCurveBuilder &builder, const double offset,
+    const CurveTangentData &d, OutputBuilder &builder, const double offset,
     const double maximumError)
 {
-    const FloatLine startTangent = curve.StartTangent();
-    const FloatLine endTangent = curve.EndTangent();
-
-    if (!TangentsSameSide(startTangent, endTangent)) {
+    if (!CanTryArcOffset(d)) {
         return false;
     }
 
     // Cast ray from curve end points to start and end tangent directions.
-    const FloatPoint vectorFrom = startTangent.UnitVector();
-    const FloatPoint vectorTo = endTangent.UnitVector();
+    const FloatPoint vectorFrom = d.StartTangent.UnitVector();
+    const FloatPoint vectorTo = d.EndTangent.UnitVector();
     const double denom = vectorTo.X * vectorFrom.Y - vectorTo.Y * vectorFrom.X;
 
     // Should not happen as we already elliminated parallel case.
@@ -579,8 +724,8 @@ static bool TryArcApproximation(const CubicCurve &curve,
         return false;
     }
 
-    const FloatPoint asv = startTangent.P1;
-    const FloatPoint bsv = endTangent.P1;
+    const FloatPoint asv = d.StartTangent.P1;
+    const FloatPoint bsv = d.EndTangent.P1;
     const double u = ((bsv.Y - asv.Y) * vectorTo.X - (bsv.X - asv.X) * vectorTo.Y) / denom;
     const double v = ((bsv.Y - asv.Y) * vectorFrom.X - (bsv.X - asv.X) * vectorFrom.Y) / denom;
 
@@ -593,8 +738,8 @@ static bool TryArcApproximation(const CubicCurve &curve,
 
     // If start or end tangents extend too far beyond intersection, return
     // early since it will not result in good approximation.
-    if (curve.P1.DistanceToSquared(V) < (startTangent.LengthSquared() * 0.25) or
-        curve.P4.DistanceToSquared(V) < (endTangent.LengthSquared() * 0.25)) {
+    if (curve.P1.DistanceToSquared(V) < (d.StartTangent.LengthSquared() * 0.25) or
+        curve.P4.DistanceToSquared(V) < (d.EndTangent.LengthSquared() * 0.25)) {
         return false;
     }
 
@@ -607,7 +752,9 @@ static bool TryArcApproximation(const CubicCurve &curve,
     const FloatLine GP4(G, curve.P4);
 
     const FloatLine E(P1G.MidPoint(), P1G.MidPoint() - P1G.NormalVector());
-    const FloatLine E1(startTangent.P1, startTangent.P1 - startTangent.NormalVector());
+    const FloatLine E1(d.StartTangent.P1, d.StartTangent.P1 -
+        d.StartTangent.NormalVector());
+
     const LineIntersectionSimple C1 = E.IntersectSimple(E1);
 
     if (!C1.Found) {
@@ -630,21 +777,29 @@ static bool TryArcApproximation(const CubicCurve &curve,
     }
 
     const FloatLine F(GP4.MidPoint(), GP4.MidPoint() - GP4.NormalVector());
-    const FloatLine F1(endTangent.P1, endTangent.P1 + endTangent.NormalVector());
+    const FloatLine F1(d.EndTangent.P1, d.EndTangent.P1 +
+        d.EndTangent.NormalVector());
+
     const LineIntersectionSimple C2 = F.IntersectSimple(F1);
 
     if (!C2.Found) {
         return false;
     }
 
-    if (C1.IntersectionPoint.IsEqual(C2.IntersectionPoint, 1e-8)) {
+    if (C1.IntersectionPoint.IsEqual(C2.IntersectionPoint, ArcCenterComparisonEpsilon)) {
         const double radius = C1.IntersectionPoint.DistanceTo(curve.P1);
+        const bool clockwise = FloatPoint::IsTriangleClockwise(curve.P1, V,
+            curve.P4);
 
         if (GoodArc(C1.IntersectionPoint, radius, curve, maximumError, 0, 1)) {
-            ArcOffset(builder, offset, C1.IntersectionPoint, curve.P1, curve.P4);
+            ArcOffset(builder, offset, C1.IntersectionPoint, curve.P1,
+                curve.P4, clockwise);
             return true;
         }
     } else {
+        const bool clockwise = FloatPoint::IsTriangleClockwise(curve.P1, V,
+            curve.P4);
+
         const double radius1 = C1.IntersectionPoint.DistanceTo(curve.P1);
 
         if (!GoodArc(C1.IntersectionPoint, radius1, curve, maximumError, 0, tG)) {
@@ -657,8 +812,8 @@ static bool TryArcApproximation(const CubicCurve &curve,
             return false;
         }
 
-        ArcOffset(builder, offset, C1.IntersectionPoint, curve.P1, G);
-        ArcOffset(builder, offset, C2.IntersectionPoint, G, curve.P4);
+        ArcOffset(builder, offset, C1.IntersectionPoint, curve.P1, G, clockwise);
+        ArcOffset(builder, offset, C2.IntersectionPoint, G, curve.P4, clockwise);
 
         return true;
     }
@@ -667,28 +822,42 @@ static bool TryArcApproximation(const CubicCurve &curve,
 }
 
 
-/**
- * Attempts to find circular arc for curve before anything else is attempted.
- * Since this runs before curve is subdivided at inflection points, curve is
- * completely arbitrary and may have its control points on different sides of
- * line connecting start and end points. So before actual arc approximation
- * happens, first it tries to determine if control points are in correct
- * places. This saves us at least one cubic root finding attempt.
- */
-static bool TryFirstArcApproximation(const CubicCurve &curve,
-    CubicCurveBuilder &builder, const double offset,
-    const double maximumError)
+static bool IsCurveApproximatelyStraight(const CurveTangentData &d)
 {
-    const FloatLine startTangent = curve.StartTangent();
-    const FloatLine endTangent = curve.EndTangent();
+    const double minx = Min(d.StartTangent.X1(), d.EndTangent.X1());
+    const double miny = Min(d.StartTangent.Y1(), d.EndTangent.Y1());
+    const double maxx = Max(d.StartTangent.X1(), d.EndTangent.X1());
+    const double maxy = Max(d.StartTangent.Y1(), d.EndTangent.Y1());
 
-    if (!TangentsSameSide(startTangent, endTangent)) {
-        // Control points are not on the same side of line connecting start
-        // and end points of the curve. Arc cannot be found for this curve.
-        return false;
-    }
+    const double x2 = d.StartTangent.X2();
+    const double y2 = d.StartTangent.Y2();
+    const double x3 = d.EndTangent.X2();
+    const double y3 = d.EndTangent.Y2();
 
-    return TryArcApproximation(curve, builder, offset, maximumError);
+    return
+        // Is P2 located between P1 and P4?
+        minx <= x2 and
+        miny <= y2 and
+        maxx >= x2 and
+        maxy >= y2 and
+        // Is P3 located between P1 and P4?
+        minx <= x3 and
+        miny <= y3 and
+        maxx >= x3 and
+        maxy >= y3 and
+        // Are all points collinear?
+        IsZeroWithEpsilon(d.Turn1,
+            ApproximatelyStraightCurveTestApsilon) and
+        IsZeroWithEpsilon(d.Turn2,
+            ApproximatelyStraightCurveTestApsilon);
+}
+
+
+static bool CurveIsCompletelyStraight(const CurveTangentData &d)
+{
+    return
+        IsZeroWithEpsilon(d.Turn1, CompletelyStraightCurveTestApsilon) and
+        IsZeroWithEpsilon(d.Turn2, CompletelyStraightCurveTestApsilon);
 }
 
 
@@ -696,29 +865,45 @@ static bool TryFirstArcApproximation(const CubicCurve &curve,
  * Main function for approximating offset of a curve without cusps.
  */
 static void ApproximateBezier(const CubicCurve &curve,
-    CubicCurveBuilder &builder, const double offset,
+    const CurveTangentData &d, OutputBuilder &builder, const double offset,
     const double maximumError)
 {
-    if (!curve.IsPoint()) {
-        if (curve.IsStraight()) {
-            const FloatLine line(curve.P1, curve.P2);
-            const FloatPoint normal = line.UnitNormalVector();
+    if (!curve.IsPoint(CurvePointClumpTestEpsilon)) {
+        if (IsCurveApproximatelyStraight(d)) {
+            if (CurveIsCompletelyStraight(d)) {
+                // Curve is extremely close to being straight.
+                const FloatLine line(curve.P1, curve.P2);
+                const FloatPoint normal = line.UnitNormalVector();
 
-            if (builder.NeedsCuspArc) {
-                builder.NeedsCuspArc = false;
+                MaybeAddCuspArc(builder, line.P1 + (normal * offset));
 
-                ArcTo(builder, builder.CuspPoint, line.P1 + (normal * offset),
-                    builder.CuspArcClockwise);
+                LineTo(builder, line.P2 + (normal * offset));
+            } else {
+                const FloatPoint p1o = d.StartTangent.P1 + (offset * d.StartUnitNormal);
+                const FloatPoint p2o = d.StartTangent.P2 + (offset * d.StartUnitNormal);
+                const FloatPoint p3o = d.EndTangent.P2 - (offset * d.EndUnitNormal);
+                const FloatPoint p4o = d.EndTangent.P1 - (offset * d.EndUnitNormal);
 
-                builder.CuspPoint = FloatPoint();
-                builder.CuspArcClockwise = false;
+                MaybeAddCuspArc(builder, p1o);
+
+                CubicTo(builder, p2o, p3o, p4o);
             }
-
-            LineTo(builder, line.P2 + (normal * offset));
         } else {
-            if (!TrySimpleCurveOffset(curve, builder, offset, maximumError)) {
-                if (!TryArcApproximation(curve, builder, offset, maximumError)) {
-                    SplitAndRecurse(curve, builder, offset, maximumError);
+            if (!TrySimpleCurveOffset(curve, d, builder, offset, maximumError)) {
+                if (!TryArcApproximation(curve, d, builder, offset, maximumError)) {
+                    // Split in half and continue.
+                    CubicCurve a;
+                    CubicCurve b;
+
+                    curve.Split(a, b);
+
+                    const CurveTangentData da(a);
+
+                    ApproximateBezier(a, da, builder, offset, maximumError);
+
+                    const CurveTangentData db(b);
+
+                    ApproximateBezier(b, db, builder, offset, maximumError);
                 }
             }
         }
@@ -727,13 +912,11 @@ static void ApproximateBezier(const CubicCurve &curve,
 
 
 static double FindPositionOnCurveWithLargeEnoughDerivative(
-    const CubicCurve &curve, const double previousT, const double currentT,
-    const double curvePrecision)
+    const CubicCurve &curve, const double previousT, const double currentT)
 {
     ASSERT(currentT > previousT);
-    ASSERT(curvePrecision > DBL_EPSILON);
 
-    const double precision = curvePrecision * 2.0;
+    static constexpr double kPrecision = CuspDerivativeLengthSquared * 2.0;
 
     double t = Max(InterpolateLinear(previousT, currentT, 0.8), currentT - 0.05);
 
@@ -741,7 +924,7 @@ static double FindPositionOnCurveWithLargeEnoughDerivative(
         const FloatPoint derivative = curve.DerivedAt(t);
         const double lengthSquared = derivative.LengthSquared();
 
-        if (lengthSquared < precision) {
+        if (lengthSquared < kPrecision) {
             return t;
         }
 
@@ -755,13 +938,11 @@ static double FindPositionOnCurveWithLargeEnoughDerivative(
 
 
 static double FindPositionOnCurveWithLargeEnoughDerivativeStart(
-    const CubicCurve &curve, const double currentT, const double nextT,
-    const double curvePrecision)
+    const CubicCurve &curve, const double currentT, const double nextT)
 {
     ASSERT(currentT < nextT);
-    ASSERT(curvePrecision > DBL_EPSILON);
 
-    const double precision = curvePrecision * 2.0;
+    static constexpr double kPrecision = CuspDerivativeLengthSquared * 2.0;
 
     double t = Min(InterpolateLinear(currentT, nextT, 0.2), currentT + 0.05);
 
@@ -769,7 +950,7 @@ static double FindPositionOnCurveWithLargeEnoughDerivativeStart(
         const FloatPoint derivative = curve.DerivedAt(t);
         const double lengthSquared = derivative.LengthSquared();
 
-        if (lengthSquared < precision) {
+        if (lengthSquared < kPrecision) {
             return t;
         }
 
@@ -782,15 +963,6 @@ static double FindPositionOnCurveWithLargeEnoughDerivativeStart(
 }
 
 
-static bool CurveIsFlat(const CubicCurve &curve)
-{
-    const FloatLine chord(curve.P1, curve.P4);
-
-    return chord.IsPointOnLine(curve.P2) and
-        chord.IsPointOnLine(curve.P3);
-}
-
-
 /**
  * If all points of the curve are collinear, a shortcut must be made because
  * general offsetting algorithm does not handle such curves very well. In case
@@ -799,7 +971,7 @@ static bool CurveIsFlat(const CubicCurve &curve)
  * are added to the output.
  */
 static void OffsetLinearCuspyCurve(const CubicCurve &curve,
-    CubicCurveBuilder &builder, const double offset,
+    OutputBuilder &builder, const double offset,
     const double *maximumCurvaturePoints, const int maximumCurvaturePointCount)
 {
     const FloatLine startTangent = curve.StartTangent();
@@ -849,7 +1021,7 @@ static void OffsetLinearCuspyCurve(const CubicCurve &curve,
 
 
 static void DoApproximateBezier(const CubicCurve &curve,
-    CubicCurveBuilder &builder, const double offset,
+    const CurveTangentData &d, OutputBuilder &builder, const double offset,
     const double maximumError)
 {
     // First find maximum curvature positions.
@@ -861,7 +1033,7 @@ static void DoApproximateBezier(const CubicCurve &curve,
     // Handle special case where the input curve is a straight line, but
     // control points do not necessary lie on line segment between curve
     // points P1 and P4.
-    if (CurveIsFlat(curve)) {
+    if (CurveIsCompletelyStraight(d)) {
         OffsetLinearCuspyCurve(curve, builder, offset,
             maximumCurvaturePositions, numMaximumCurvaturePositions);
         return;
@@ -875,10 +1047,10 @@ static void DoApproximateBezier(const CubicCurve &curve,
     // Merge maximum curvature and inflection point positions.
     double t[5];
 
-    int count = MergeCurvePositions(t, 0, inflections, numInflections);
+    const int count0 = MergeCurvePositions(t, 0, inflections, numInflections, 1e-7);
 
-    count = MergeCurvePositions(t, count, maximumCurvaturePositions,
-        numMaximumCurvaturePositions);
+    const int count = MergeCurvePositions(t, count0, maximumCurvaturePositions,
+        numMaximumCurvaturePositions, 1e-5);
 
     Quicksort(t, count, [](const double a, const double b) -> bool {
         return a < b;
@@ -886,10 +1058,8 @@ static void DoApproximateBezier(const CubicCurve &curve,
 
     if (count == 0) {
         // No initial subdivision suggestions.
-        ApproximateBezier(curve, builder, offset, maximumError);
+        ApproximateBezier(curve, d, builder, offset, maximumError);
     } else {
-        const double precision = FindCubicPrecision(curve);
-
         double previousT = 0;
 
         for (int i = 0; i < count; i++) {
@@ -897,7 +1067,7 @@ static void DoApproximateBezier(const CubicCurve &curve,
             const FloatPoint derivative = curve.DerivedAt(T);
             const double lengthSquared = derivative.LengthSquared();
 
-            if (lengthSquared < precision) {
+            if (lengthSquared < CuspDerivativeLengthSquared) {
                 // Squared length of derivative becomes tiny. This is where
                 // the cusp is. The goal here is to find a spon on curve,
                 // located before T which has large enough derivative and draw
@@ -905,16 +1075,17 @@ static void DoApproximateBezier(const CubicCurve &curve,
                 // derivative.
 
                 const double t1 = FindPositionOnCurveWithLargeEnoughDerivative(
-                    curve, previousT, T, precision);
+                    curve, previousT, T);
 
                 ASSERT(t1 < T);
 
                 const CubicCurve k = curve.GetSubcurve(previousT, t1);
+                const CurveTangentData nd(k);
 
-                ApproximateBezier(k, builder, offset, maximumError);
+                ApproximateBezier(k, nd, builder, offset, maximumError);
 
                 const double t2 = FindPositionOnCurveWithLargeEnoughDerivativeStart(
-                    curve, T, i == (count - 1) ? 1.0 : t[i + 1], precision);
+                    curve, T, i == (count - 1) ? 1.0 : t[i + 1]);
 
                 ASSERT(t2 > T);
 
@@ -929,8 +1100,9 @@ static void DoApproximateBezier(const CubicCurve &curve,
                 // to offset approximation function.
 
                 const CubicCurve k = curve.GetSubcurve(previousT, T);
+                const CurveTangentData nd(k);
 
-                ApproximateBezier(k, builder, offset, maximumError);
+                ApproximateBezier(k, nd, builder, offset, maximumError);
 
                 previousT = T;
             }
@@ -938,60 +1110,28 @@ static void DoApproximateBezier(const CubicCurve &curve,
 
         ASSERT(previousT < 1.0);
 
-        ApproximateBezier(curve.GetSubcurve(previousT, 1.0), builder, offset,
+        const CubicCurve k = curve.GetSubcurve(previousT, 1.0);
+        const CurveTangentData nd(k);
+
+        ApproximateBezier(k, nd, builder, offset,
             maximumError);
     }
 }
 
 
 /**
- * Adjusts maximum error value to reflect scale of the input curve. If curve
- * is very small, maximum error should also be smaller to maintain acceptable
- * offset quality.
+ * Flattens ends of curves if control points are too close to end points.
  */
-static double AdjustMaximumErrorForCurve(const CubicCurve &curve,
-    const double maximumError)
-{
-    const double a = Clamp(maximumError, 0.0001, 10.0);
-
-    const double squaredLengths =
-        curve.P1.DistanceToSquared(curve.P2) +
-        curve.P2.DistanceToSquared(curve.P3) +
-        curve.P3.DistanceToSquared(curve.P4);
-
-    // Caller must ensure curve is not a point.
-    ASSERT(squaredLengths > 0);
-
-    const double b = Sqrt(squaredLengths * 6e-4);
-
-    const double c = Clamp(b, 0.05, 1.0);
-
-    return InterpolateLinear(0.00001, a, c);
-}
-
-
 static CubicCurve FixRedundantTangents(const CubicCurve &curve)
 {
-    const double P1ToP2Squared = curve.P1.DistanceToSquared(curve.P2);
-    const double P3ToP4Squared = curve.P3.DistanceToSquared(curve.P4);
-
-    const double remainingLengthsSquared =
-        curve.P2.DistanceToSquared(curve.P3) +
-        curve.P1.DistanceToSquared(curve.P4);
-
-    const double perimeterSquared = P1ToP2Squared + P3ToP4Squared +
-        remainingLengthsSquared;
-
-    ASSERT(perimeterSquared > 0.0);
-
     FloatPoint p2 = curve.P2;
     FloatPoint p3 = curve.P3;
 
-    if ((P1ToP2Squared / perimeterSquared) < 3e-8) {
+    if (curve.P1.DistanceToSquared(p2) < 1e-12) {
         p2 = curve.P1;
     }
 
-    if ((P3ToP4Squared / perimeterSquared) < 3e-8) {
+    if (curve.P4.DistanceToSquared(p3) < 1e-12) {
         p3 = curve.P4;
     }
 
@@ -1002,46 +1142,82 @@ static CubicCurve FixRedundantTangents(const CubicCurve &curve)
 void OffsetCurve(const CubicCurve &curve, const double offset,
     const double maximumError, CubicCurveBuilder &builder)
 {
-    if (curve.IsPoint()) {
+    builder.Reset();
+
+    const double minx = Min4(curve.P1.X, curve.P2.X, curve.P3.X, curve.P4.X);
+    const double maxx = Max4(curve.P1.X, curve.P2.X, curve.P3.X, curve.P4.X);
+    const double miny = Min4(curve.P1.Y, curve.P2.Y, curve.P3.Y, curve.P4.Y);
+    const double maxy = Max4(curve.P1.Y, curve.P2.Y, curve.P3.Y, curve.P4.Y);
+
+    const double dx = maxx - minx;
+    const double dy = maxy - miny;
+
+    if (dx < CurvePointClumpTestEpsilon and dy < CurvePointClumpTestEpsilon) {
         return;
     }
 
-    if (FuzzyIsZero(offset)) {
-        MoveTo(builder, curve.P1);
+    // Select bigger of width and height.
+    const double m = Max(dx, dy) / 2.0;
 
-        CubicTo(builder, curve.P2, curve.P3, curve.P4);
+    // Calculate scaled offset.
+    const double so = offset / m;
 
+    if (FuzzyIsZero(so)) {
+        builder.AddCubic(curve.P1, curve.P2, curve.P3, curve.P4);
         return;
     }
 
-    const CubicCurve c = FixRedundantTangents(curve);
+    // Calculate "normalized" curve which kind of fits into range from -1 to 1.
+    const double tx = (minx + maxx) / 2.0;
+    const double ty = (miny + maxy) / 2.0;
+    const FloatPoint t(tx, ty);
 
-    if (c.IsStraight()) {
-        // Curve is straight, use simple line translation instead.
-        const FloatLine line(c.P1, c.P4);
-        const FloatPoint normal = line.UnitNormalVector();
-        const FloatLine translated = line.Translated(normal * offset);
+    const FloatPoint p1 = curve.P1 - t;
+    const FloatPoint p2 = curve.P2 - t;
+    const FloatPoint p3 = curve.P3 - t;
+    const FloatPoint p4 = curve.P4 - t;
 
-        MoveTo(builder, translated.P1);
+    const CubicCurve sc(p1 / m, p2 / m, p3 / m, p4 / m);
 
-        LineTo(builder, translated.P2);
+    const CubicCurve c = FixRedundantTangents(sc);
+
+    OutputBuilder b(builder, m, t);
+
+    const CurveTangentData d(c);
+
+    if (IsCurveApproximatelyStraight(d)) {
+        if (CurveIsCompletelyStraight(d)) {
+            // Curve is extremely close to being straight, use simple line
+            // translation.
+            const FloatLine line(c.P1, c.P4);
+            const FloatPoint normal = line.UnitNormalVector();
+            const FloatLine translated = line.Translated(normal * so);
+
+            MoveTo(b, translated.P1);
+
+            LineTo(b, translated.P2);
+        } else {
+            // Curve is almost straight. Translate start and end tangents
+            // separately and generate a cubic curve.
+            const FloatPoint p1o = d.StartTangent.P1 + (so * d.StartUnitNormal);
+            const FloatPoint p2o = d.StartTangent.P2 + (so * d.StartUnitNormal);
+            const FloatPoint p3o = d.EndTangent.P2 - (so * d.EndUnitNormal);
+            const FloatPoint p4o = d.EndTangent.P1 - (so * d.EndUnitNormal);
+
+            MoveTo(b, p1o);
+
+            CubicTo(b, p2o, p3o, p4o);
+        }
     } else {
         // Arbitrary curve.
-        const FloatLine startTangent = c.StartTangent();
-        const FloatPoint startTangentNormal = startTangent.UnitNormalVector();
-        const FloatPoint startPoint = startTangent.P1 +
-            (startTangentNormal * offset);
-
-        MoveTo(builder, startPoint);
-
-        const double me = AdjustMaximumErrorForCurve(c, maximumError);
+        MoveTo(b, d.StartTangent.P1 + (so * d.StartUnitNormal));
 
         // Try arc approximation first in case this curve was intended to
         // approximate circle. If that is indeed true, we avoid a lot of
         // expensive calculations like finding inflection and maximum
         // curvature points.
-        if (!TryFirstArcApproximation(c, builder, offset, me)) {
-            DoApproximateBezier(c, builder, offset, me);
+        if (!TryArcApproximation(c, d, b, so, maximumError)) {
+            DoApproximateBezier(c, d, b, so, maximumError);
         }
     }
 }

@@ -33,27 +33,27 @@ bool CubicCurve::IsPoint(const double tolerance) const
 }
 
 
-bool CubicCurve::IsStraight(const double epsilon) const
+bool CubicCurve::IsStraight() const
 {
-    const double minx = Min(P1.X, P4.X) - epsilon;
-    const double miny = Min(P1.Y, P4.Y) - epsilon;
-    const double maxx = Max(P1.X, P4.X) + epsilon;
-    const double maxy = Max(P1.Y, P4.Y) + epsilon;
+    const double minx = Min(P1.X, P4.X);
+    const double miny = Min(P1.Y, P4.Y);
+    const double maxx = Max(P1.X, P4.X);
+    const double maxy = Max(P1.Y, P4.Y);
 
     return
         // Is P2 located between P1 and P4?
         minx <= P2.X and
         miny <= P2.Y and
-        P2.X <= maxx and
-        P2.Y <= maxy and
+        maxx >= P2.X and
+        maxy >= P2.Y and
         // Is P3 located between P1 and P4?
         minx <= P3.X and
         miny <= P3.Y and
-        P3.X <= maxx and
-        P3.Y <= maxy and
+        maxx >= P3.X and
+        maxy >= P3.Y and
         // Are all points collinear?
-        IsZeroWithEpsilon(FloatPoint::Turn(P1, P2, P4), epsilon) and
-        IsZeroWithEpsilon(FloatPoint::Turn(P1, P3, P4), epsilon);
+        FuzzyIsZero(FloatPoint::Turn(P1, P2, P4)) and
+        FuzzyIsZero(FloatPoint::Turn(P1, P3, P4));
 }
 
 

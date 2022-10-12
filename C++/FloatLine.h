@@ -148,6 +148,30 @@ public:
 public:
 
     /**
+     * Return X coordinate of the first point.
+     */
+    double X1() const;
+
+
+    /**
+     * Return Y coordinate of the first point.
+     */
+    double Y1() const;
+
+
+    /**
+     * Return X coordinate of the second point.
+     */
+    double X2() const;
+
+
+    /**
+     * Return Y coordinate of the second point.
+     */
+    double Y2() const;
+
+
+    /**
      * Returns difference between X component of point 2 and point 1 of this
      * line.
      */
@@ -307,6 +331,26 @@ public:
     FloatPoint P1;
     FloatPoint P2;
 };
+
+
+FORCE_INLINE double FloatLine::X1() const {
+    return P1.X;
+}
+
+
+FORCE_INLINE double FloatLine::Y1() const {
+    return P1.Y;
+}
+
+
+FORCE_INLINE double FloatLine::X2() const {
+    return P2.X;
+}
+
+
+FORCE_INLINE double FloatLine::Y2() const {
+    return P2.Y;
+}
 
 
 FORCE_INLINE double FloatLine::Dx() const {

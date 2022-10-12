@@ -19,12 +19,19 @@
     ((sizeof(a) / sizeof(*(a))) / \
       static_cast<size_t>(!(sizeof(a) % sizeof(*(a)))))
 
+#define SIZE_OF(a) \
+    (static_cast<int>(sizeof(a)))
+
+#define DISABLE_COPY_AND_ASSIGN(TypeName) \
+    TypeName(const TypeName &) = delete; \
+    void operator=(const TypeName &) = delete;
+
 
 /**
  * Returns absolute of a given value.
  */
 template <typename T>
-constexpr T Abs(const T t) {
+static constexpr T Abs(const T t) {
     return t >= 0 ? t : -t;
 }
 
@@ -33,7 +40,7 @@ constexpr T Abs(const T t) {
  * Returns greater of two given values.
  */
 template <typename T>
-constexpr T Max(const T a, const T b) {
+static constexpr T Max(const T a, const T b) {
     return a < b ? b : a;
 }
 
@@ -42,8 +49,44 @@ constexpr T Max(const T a, const T b) {
  * Returns smaller of two given values.
  */
 template <typename T>
-constexpr T Min(const T a, const T b) {
+static constexpr T Min(const T a, const T b) {
     return a < b ? a : b;
+}
+
+
+/**
+ * Finds the greatest of the three values.
+ */
+template <typename T>
+static constexpr T Max3(const T a, const T b, const T c) {
+    return Max(a, Max(b, c));
+}
+
+
+/**
+ * Finds the smallest of the three values.
+ */
+template <typename T>
+static constexpr T Min3(const T a, const T b, const T c) {
+    return Min(a, Min(b, c));
+}
+
+
+/**
+ * Finds the greatest of the four values.
+ */
+template <typename T>
+static constexpr T Max4(const T a, const T b, const T c, const T d) {
+    return Max(a, Max(b, Max(c, d)));
+}
+
+
+/**
+ * Finds the smallest of the four values.
+ */
+template <typename T>
+static constexpr T Min4(const T a, const T b, const T c, const T d) {
+    return Min(a, Min(b, Min(c, d)));
 }
 
 
@@ -51,7 +94,7 @@ constexpr T Min(const T a, const T b) {
  * Returns value clamped to range between minimum and maximum values.
  */
 template <typename T>
-constexpr T Clamp(const T val, const T min, const T max) {
+static constexpr T Clamp(const T val, const T min, const T max) {
     return val > max ? max : val < min ? min : val;
 }
 
@@ -59,7 +102,7 @@ constexpr T Clamp(const T val, const T min, const T max) {
 /**
  * Convert degrees to radians.
  */
-constexpr double Deg2Rad(const double x) {
+static constexpr double Deg2Rad(const double x) {
     // pi / 180
     return x * 0.01745329251994329576923690768489;
 }
@@ -68,7 +111,7 @@ constexpr double Deg2Rad(const double x) {
 /**
  * Convert radians to degrees.
  */
-constexpr double Rad2Deg(const double x) {
+static constexpr double Rad2Deg(const double x) {
     // 180 / pi.
     return x * 57.295779513082320876798154814105;
 }
@@ -265,7 +308,7 @@ static FORCE_INLINE double Atan2(const double y, const double x) {
 /**
  * Returns true if a given floating point value is not a number.
  */
-constexpr bool IsNaN(const float x) {
+static constexpr bool IsNaN(const float x) {
     return x != x;
 }
 
@@ -274,7 +317,7 @@ constexpr bool IsNaN(const float x) {
  * Returns true if a given double precision floating point value is not a
  * number.
  */
-constexpr bool IsNaN(const double x) {
+static constexpr bool IsNaN(const double x) {
     return x != x;
 }
 

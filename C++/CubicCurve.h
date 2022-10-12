@@ -83,11 +83,10 @@ public:
 
     /**
      * Returns true if this curve is a straight line. Curve is straight line
-     * when all four points are parallel.
-     *
-     * @param epsilon Maximum error when comparing numbers.
+     * when both control points lie on line segment between the first and the
+     * last point of the curve.
      */
-    bool IsStraight(const double epsilon = DBL_EPSILON) const;
+    bool IsStraight() const;
 
 
     /**

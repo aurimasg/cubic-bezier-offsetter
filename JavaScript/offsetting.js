@@ -77,9 +77,9 @@ const ArcProbePositions = [
  * increases the time spent for testing if candidate is good.
  */
 const SimpleOffsetProbePositions = [
-    0.2,
+    0.25,
     0.5,
-    0.8
+    0.75
 ];
 
 
@@ -1062,39 +1062,29 @@ class CubicCurve {
 
     /**
      * Returns true if this curve is a straight line. Curve is straight line
-     * when all four points are parallel.
-     *
-     * @param epsilon Maximum error when comparing numbers.
+     * when both control points lie on line segment between the first and the
+     * last point of the curve.
      */
-    isStraightWithEpsilon(epsilon) {
-        const minx = Math.min(this.P1.X, this.P4.X) - epsilon;
-        const miny = Math.min(this.P1.Y, this.P4.Y) - epsilon;
-        const maxx = Math.max(this.P1.X, this.P4.X) + epsilon;
-        const maxy = Math.max(this.P1.Y, this.P4.Y) + epsilon;
+    isStraight() {
+        const minx = Math.min(this.P1.X, this.P4.X);
+        const miny = Math.min(this.P1.Y, this.P4.Y);
+        const maxx = Math.max(this.P1.X, this.P4.X);
+        const maxy = Math.max(this.P1.Y, this.P4.Y);
 
         return
             // Is P2 located between P1 and P4?
             minx <= this.P2.X &&
             miny <= this.P2.Y &&
-            this.P2.X <= maxx &&
-            this.P2.Y <= maxy &&
+            maxx >= this.P2.X &&
+            maxy >= this.P2.Y &&
             // Is P3 located between P1 and P4?
             minx <= this.P3.X &&
             miny <= this.P3.Y &&
-            this.P3.X <= maxx &&
-            this.P3.Y <= maxy &&
+            maxx >= this.P3.X &&
+            maxy >= this.P3.Y &&
             // Are all points collinear?
-            isZeroWithEpsilon(FloatPoint.turn(this.P1, this.P2, this.P4), epsilon) &&
-            isZeroWithEpsilon(FloatPoint.turn(this.P1, this.P3, this.P4), epsilon);
-    }
-
-
-    /**
-     * Returns true if this curve is a straight line. Curve is straight line
-     * when all four points are parallel.
-     */
-    isStraight() {
-        return this.isStraightWithEpsilon(Number.EPSILON);
+            fuzzyIsZero(FloatPoint.turn(this.P1, this.P2, this.P4)) &&
+            fuzzyIsZero(FloatPoint.turn(this.P1, this.P3, this.P4));
     }
 
 

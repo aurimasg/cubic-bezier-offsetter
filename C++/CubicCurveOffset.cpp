@@ -401,8 +401,13 @@ static void ArcOffset(OutputBuilder &builder, const double offset,
 
     // Determine if it is clockwise again since arc orientation may have
     // changed if arc radius was smaller than offset.
+    //
+    // Also it is important to use previous point to determine orientation
+    // instead of the point we just calculated as the start of circular arc
+    // because for small arcs a small numeric error can result in incorrect
+    // arc orientation.
     ArcTo(builder, center, l2.P2, FloatPoint::IsTriangleClockwise(center,
-        l1.P2, l2.P2));
+        builder.PreviousPoint, l2.P2));
 }
 
 

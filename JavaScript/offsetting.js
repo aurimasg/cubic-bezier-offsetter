@@ -1833,25 +1833,28 @@ function acceptOffset(original, parallel, offset, maximumError) {
 
 
 function arcOffset(builder, offset, center, from, to, clockwise) {
-    var line = new FloatLine(center, to);
+    var l1 = new FloatLine(center, from);
+    var l2 = new FloatLine(center, to);
 
     if (clockwise) {
-        line.extendByLengthFront(offset);
-    } else {
-        line.extendByLengthFront(-offset);
-    }
-
-    var l2 = new FloatLine(center, from);
-
-    if (clockwise) {
+        l1.extendByLengthFront(offset);
         l2.extendByLengthFront(offset);
     } else {
+        l1.extendByLengthFront(-offset);
         l2.extendByLengthFront(-offset);
     }
 
-    maybeAddCuspArc(builder, l2.P2);
+    maybeAddCuspArc(builder, l1.P2);
 
-    arcTo(builder, center, line.P2, clockwise);
+    // Determine if it is clockwise again since arc orientation may have
+    // changed if arc radius was smaller than offset.
+    //
+    // Also it is important to use previous point to determine orientation
+    // instead of the point we just calculated as the start of circular arc
+    // because for small arcs a small numeric error can result in incorrect
+    // arc orientation.
+    arcTo(builder, center, l2.P2, FloatPoint.isTriangleClockwise(center,
+        builder.previousPoint, l2.P2));
 }
 
 
@@ -2190,14 +2193,16 @@ function tryArcApproximation(curve, d, builder, offset, maximumError) {
 
     if (C1.equalsWithEpsilon(C2, ArcCenterComparisonEpsilon)) {
         const radius = C1.distanceTo(curve.P1);
-        const clockwise = FloatPoint.isTriangleClockwise(curve.P1, V, curve.P4);
 
         if (goodArc(C1, radius, curve, maximumError, 0, 1)) {
+            const clockwise = FloatPoint.isTriangleClockwise(curve.P1, V,
+                curve.P4);
+
             arcOffset(builder, offset, C1, curve.P1, curve.P4, clockwise);
+
             return true;
         }
     } else {
-        const clockwise = FloatPoint.isTriangleClockwise(curve.P1, V, curve.P4);
         const radius1 = C1.distanceTo(curve.P1);
 
         if (!goodArc(C1, radius1, curve, maximumError, 0, tG)) {
@@ -2209,6 +2214,9 @@ function tryArcApproximation(curve, d, builder, offset, maximumError) {
         if (!goodArc(C2, radius2, curve, maximumError, tG, 1)) {
             return false;
         }
+
+        const clockwise = FloatPoint.isTriangleClockwise(curve.P1, V,
+            curve.P4);
 
         arcOffset(builder, offset, C1, curve.P1, G, clockwise);
         arcOffset(builder, offset, C2, G, curve.P4, clockwise);

@@ -313,27 +313,16 @@ static void ArcTo(OutputBuilder &builder, const FloatPoint &center,
 }
 
 
-template <typename Function>
-static void MaybeAddCuspArcWithFunction(OutputBuilder &builder,
-    const Function toPointFunction)
+static void MaybeAddCuspArc(OutputBuilder &builder, const FloatPoint &toPoint)
 {
     if (builder.NeedsCuspArc) {
         builder.NeedsCuspArc = false;
 
-        ArcTo(builder, builder.CuspPoint, toPointFunction(),
-            builder.CuspArcClockwise);
+        ArcTo(builder, builder.CuspPoint, toPoint, builder.CuspArcClockwise);
 
         builder.CuspPoint = FloatPoint();
         builder.CuspArcClockwise = false;
     }
-}
-
-
-static void MaybeAddCuspArc(OutputBuilder &builder, const FloatPoint &toPoint)
-{
-    MaybeAddCuspArcWithFunction(builder, [toPoint]() -> FloatPoint {
-        return toPoint;
-    });
 }
 
 
@@ -397,27 +386,23 @@ static void ArcOffset(OutputBuilder &builder, const double offset,
     const FloatPoint &center, const FloatPoint &from, const FloatPoint &to,
     const bool clockwise)
 {
-    FloatLine line(center, to);
+    FloatLine l1(center, from);
+    FloatLine l2(center, to);
 
     if (clockwise) {
-        line.ExtendByLengthFront(offset);
+        l1.ExtendByLengthFront(offset);
+        l2.ExtendByLengthFront(offset);
     } else {
-        line.ExtendByLengthFront(-offset);
+        l1.ExtendByLengthFront(-offset);
+        l2.ExtendByLengthFront(-offset);
     }
 
-    MaybeAddCuspArcWithFunction(builder, [center, from, offset, clockwise]() -> FloatPoint {
-        FloatLine l2(center, from);
+    MaybeAddCuspArc(builder, l1.P2);
 
-        if (clockwise) {
-            l2.ExtendByLengthFront(offset);
-        } else {
-            l2.ExtendByLengthFront(-offset);
-        }
-
-        return l2.P2;
-    });
-
-    ArcTo(builder, center, line.P2, clockwise);
+    // Determine if it is clockwise again since arc orientation may have
+    // changed if arc radius was smaller than offset.
+    ArcTo(builder, center, l2.P2, FloatPoint::IsTriangleClockwise(center,
+        l1.P2, l2.P2));
 }
 
 
@@ -788,18 +773,16 @@ static bool TryArcApproximation(const CubicCurve &curve,
 
     if (C1.IntersectionPoint.IsEqual(C2.IntersectionPoint, ArcCenterComparisonEpsilon)) {
         const double radius = C1.IntersectionPoint.DistanceTo(curve.P1);
-        const bool clockwise = FloatPoint::IsTriangleClockwise(curve.P1, V,
-            curve.P4);
 
         if (GoodArc(C1.IntersectionPoint, radius, curve, maximumError, 0, 1)) {
+            const bool clockwise = FloatPoint::IsTriangleClockwise(curve.P1,
+                V, curve.P4);
+
             ArcOffset(builder, offset, C1.IntersectionPoint, curve.P1,
                 curve.P4, clockwise);
             return true;
         }
     } else {
-        const bool clockwise = FloatPoint::IsTriangleClockwise(curve.P1, V,
-            curve.P4);
-
         const double radius1 = C1.IntersectionPoint.DistanceTo(curve.P1);
 
         if (!GoodArc(C1.IntersectionPoint, radius1, curve, maximumError, 0, tG)) {
@@ -811,6 +794,9 @@ static bool TryArcApproximation(const CubicCurve &curve,
         if (!GoodArc(C2.IntersectionPoint, radius2, curve, maximumError, tG, 1)) {
             return false;
         }
+
+        const bool clockwise = FloatPoint::IsTriangleClockwise(curve.P1, V,
+            curve.P4);
 
         ArcOffset(builder, offset, C1.IntersectionPoint, curve.P1, G, clockwise);
         ArcOffset(builder, offset, C2.IntersectionPoint, G, curve.P4, clockwise);

@@ -18,7 +18,7 @@ const NearCuspPointSearchMaxIterationCount = 18;
  *
  * Smaller value means smaller curves will be accepted for output.
  */
-const MaximumTinyCurvePolygonPerimeterSquared = 1e-6;
+const MaximumTinyCurvePolygonPerimeterSquared = 1e-7;
 
 
 /**
@@ -29,23 +29,69 @@ const MaximumTinyCurvePolygonPerimeterSquared = 1e-6;
  *
  * Smaller value means smaller arcs will be accepted for output.
  */
-const MinimumArcRadius = 1e-6;
+const MinimumArcRadius = 1e-8;
+
+
+/**
+ * An upper limit of arc radius. Circular arcs with calculated radius greater
+ * than this value will not be considered as accepted approximations of curve
+ * segments.
+ */
+const MaximumArcRadius = 1e+6;
 
 
 /**
  * Offsetter does not attempt to find exact cusp locations and does not
  * consider cusp only to be where derivative vector length is exactly zero.
- * This value is a scale value for finding maximum length of derivative vector
- * which will be used for cusp detection.
- *
- * First squared distances of lines P1 → P2, P2 → P3 and P3 → P4 are added
- * together and multiplied by this scale value. Then, if point on curve has
- * derivative vector length equal to or less than the calculated value, that
- * point will be considered as cusp and is processed accordingly.
  *
  * Smaller values means that sharper curve edges are considered cusps.
  */
-const CuspDerivativeLengthScale = 3e-5;
+const CuspDerivativeLengthSquared = 1.5e-4;
+
+
+/**
+ * If X and Y components of all points are equal when compared with this
+ * epsilon, curve is considered a point.
+ */
+const CurvePointClumpTestEpsilon = 1e-14;
+
+
+/**
+ * Epsilon used to compare coordinates of circular arc centers to see if they
+ * can be merged into a single circular arc.
+ */
+const ArcCenterComparisonEpsilon = 1e-8;
+
+
+/**
+ * When testing if curve is almost straight, cross products of unit vectors
+ * are calculated as follows
+ *
+ *     Turn1 = (P1 → P2) ⨯ (P1 → P4)
+ *     Turn2 = (P2 → P3) ⨯ (P1 → P4)
+ *
+ * Where P1, P2, P3 and P4 are curve points and (X → Y) are unit vectors going
+ * from X to a direction of Y.
+ *
+ * Then these values are compared with zero. If they both are close to zero,
+ * curve is considered approximately straight. This is the epsilon used for
+ * comparing Turn1 and Turn2 values to zero.
+ *
+ * Bigger value means less straight curves are considered approximately
+ * straight.
+ */
+const ApproximatelyStraightCurveTestApsilon = 1e-5;
+
+
+/**
+ * The logic is the same as for ApproximatelyStraightCurveTestApsilon value.
+ * This value is used to determine if curve is completely straight, not just
+ * approximately straight.
+ *
+ * Bigger value means less straight curves are considered completely straight.
+ * This value should be smaller than ApproximatelyStraightCurveTestApsilon.
+ */
+const CompletelyStraightCurveTestApsilon = 1e-15;
 
 
 /**
@@ -79,7 +125,7 @@ const ArcProbePositions = [
 const SimpleOffsetProbePositions = [
     0.25,
     0.5,
-    0.75
+    0.85
 ];
 
 
@@ -149,6 +195,38 @@ function interpolateLinear(A, B, t) {
     //ASSERT(t >= 0);
     //ASSERT(t <= 1);
     return A + ((B - A) * t);
+}
+
+
+/**
+ * Finds the greatest of the three values.
+ */
+function max3(a, b, c) {
+    return Math.max(a, Math.max(b, c));
+}
+
+
+/**
+ * Finds the smallest of the three values.
+ */
+function min3(a, b, c) {
+    return Math.min(a, Math.min(b, c));
+}
+
+
+/**
+ * Finds the greatest of the four values.
+ */
+function max4(a, b, c, d) {
+    return Math.max(a, Math.max(b, Math.max(c, d)));
+}
+
+
+/**
+ * Finds the smallest of the four values.
+ */
+function min4(a, b, c, d) {
+    return Math.min(a, Math.min(b, Math.min(c, d)));
 }
 
 
@@ -633,6 +711,38 @@ class FloatLine {
 
 
     /**
+     * Return X coordinate of the first point.
+     */
+    x1() {
+        return this.P1.X;
+    }
+
+
+    /**
+     * Return Y coordinate of the first point.
+     */
+    y1() {
+        return this.P1.Y;
+    }
+
+
+    /**
+     * Return X coordinate of the second point.
+     */
+    x2() {
+        return this.P2.X;
+    }
+
+
+    /**
+     * Return Y coordinate of the second point.
+     */
+    y2() {
+        return this.P2.Y;
+    }
+
+
+    /**
      * Returns difference between X component of point 2 and point 1 of this
      * line.
      */
@@ -1071,9 +1181,8 @@ class CubicCurve {
         const maxx = Math.max(this.P1.X, this.P4.X);
         const maxy = Math.max(this.P1.Y, this.P4.Y);
 
-        return
-            // Is P2 located between P1 and P4?
-            minx <= this.P2.X &&
+        // Is P2 located between P1 and P4?
+        return minx <= this.P2.X &&
             miny <= this.P2.Y &&
             maxx >= this.P2.X &&
             maxy >= this.P2.Y &&
@@ -1410,74 +1519,152 @@ class CubicCurve {
 
 
 /**
- * Used for parallel curve construction. Users need to override methods to
- * accept offsetter output.
+ * Used for parallel curve construction.
  */
 class CubicCurveBuilder {
+    segments = [];
 
     /**
-     * Called exactly once for each offsetter invocation when called with
-     * curve which is not a point.
-     *
-     * @param point Point to move to.
+     * Adds line.
      */
-    moveTo(point) {
+    addLine(p1, p2) {
+        this.segments.push(CubicCurve.createFromLine(p1, p2));
     }
 
 
     /**
-     * Draw line from previous to a given point.
-     *
-     * @param point End point of a line.
+     * Adds cubic curve.
      */
-    lineTo(point) {
+    addCubic(p1, cp1, cp2, to) {
+        this.segments.push(new CubicCurve(p1, cp1, cp2, to));
     }
 
 
     /**
-     * Draw cubic curve from previous point to a given point.
-     *
-     * @param cp1 The first control point of a cubic curve.
-     *
-     * @param cp2 The second control point of a cubic curve.
-     *
-     * @param to End point of a cubic curve.
+     * Returns the first point.
      */
-    cubicTo(cp1, cp2, to) {
+    getFirstPoint() {
+        return this.segments[0].P1;
     }
 
-    PreviousPoint = new FloatPoint(0, 0);
 
-    CuspPoint = new FloatPoint(0, 0);
+    /**
+     * Returns the last point.
+     */
+    getLastPoint() {
+        return this.segments[this.segments.length - 1].P4;
+    }
 
-    NeedsCuspArc = false;
-    CuspArcClockwise = false;
+
+    /**
+     * Returns start tangent.
+     */
+    getStartTangent() {
+        return this.segments[0].startTangent();
+    }
+
+
+    /**
+     * Returns end tangent.
+     */
+    getEndTangent() {
+        return this.segments[this.segments.length - 1].endTangent();
+    }
+
+
+    /**
+     * Returns the number of curves.
+     */
+    getSegmentCount() {
+        return this.segments.length;
+    }
+
+
+    /**
+     * Returns output segment at a given index.
+     *
+     * @param index Segment index. Must be equal or greater than zero and less
+     * than the value returned by getSegmentCount.
+     */
+    getSegmentAt(index) {
+        return this.segments[index];
+    }
+
+
+    /**
+     * Clears all segments in this builder.
+     */
+    reset() {
+        this.segments.length = 0;
+    }
 };
 
 
+/**
+ * Keeps data needed to generate a set of output segments.
+ */
+class OutputBuilder {
+    builder = null;
+    previousPoint = new FloatPoint();
+    previousPointT = new FloatPoint();
+    cuspPoint = new FloatPoint();
+    needsCuspArc = false;
+    cuspArcClockwise = false;
+    scale = 1;
+    translation = new FloatPoint();
+
+    constructor(builder, scale, translation) {
+        this.builder = builder;
+        this.scale = scale;
+        this.translation = translation;
+    }
+};
+
+
+/**
+ * Called once when the first point of output is calculated.
+ */
 function moveTo(builder, to) {
-    builder.moveTo(to);
-    builder.PreviousPoint = to;
+    builder.previousPoint = to;
+    builder.previousPointT = to.multiplyScalar(builder.scale).plus(builder.translation);
 }
 
 
-function lineTo(builder, to)
-{
-    const previous = builder.PreviousPoint;
+/**
+ * Called when a new line needs to be added to the output. Line starts at the
+ * last point of previously added segment or point set by a call to MoveTo.
+ */
+function lineTo(builder, to) {
+    const previous = builder.previousPoint;
 
     if (!previous.equals(to)) {
-        builder.lineTo(to);
-        builder.PreviousPoint = to;
+        const t = to.multiplyScalar(builder.scale).plus(builder.translation);
+
+        builder.builder.addLine(builder.previousPointT, t);
+
+        builder.previousPoint = to;
+        builder.previousPointT = t;
     }
 }
 
 
+/**
+ * Called when a new cubic curve needs to be added to the output. Curve starts
+ * at the last point of previously added segment or point set by a call to
+ * MoveTo.
+ */
 function cubicTo(builder, cp1, cp2, to) {
-    const previous = builder.PreviousPoint;
+    const previous = builder.previousPoint;
 
     if (!previous.equals(cp1) || !previous.equals(cp2) || !previous.equals(to)) {
-        builder.cubicTo(cp1, cp2, to);
-        builder.PreviousPoint = to;
+        const c1 = cp1.multiplyScalar(builder.scale).plus(builder.translation);
+        const c2 = cp2.multiplyScalar(builder.scale).plus(builder.translation);
+        const t = to.multiplyScalar(builder.scale).plus(builder.translation);
+
+        builder.builder.addCubic(builder.previousPointT, c1, c2, t);
+
+        builder.previousPoint = to;
+        builder.previousPointT = t;
     }
 }
 
@@ -1492,8 +1679,7 @@ function cubicTo(builder, cp1, cp2, to) {
  * @param p4 End point of circular arc. Both components must be in range from
  * -1 to 1.
  */
-function findUnitCubicCurveForArc(p1, p4)
-{
+function findUnitCubicCurveForArc(p1, p4) {
     const ax = p1.X;
     const ay = p1.Y;
     const bx = p4.X;
@@ -1511,8 +1697,13 @@ function findUnitCubicCurveForArc(p1, p4)
 }
 
 
+/**
+ * Called when a circular arc needs to be added to the output. Arc starts at
+ * the last point of previously added segment or point set by a call to MoveTo
+ * and goes to a given end point.
+ */
 function arcTo(builder, center, to, clockwise) {
-    const arcFrom = builder.PreviousPoint;
+    const arcFrom = builder.previousPoint;
 
     const arcRadius = center.distanceTo(arcFrom);
 
@@ -1579,25 +1770,41 @@ function arcTo(builder, center, to, clockwise) {
 }
 
 
-function findCubicPrecision(curve) {
-    return (
-        curve.P1.distanceToSquared(curve.P2) +
-        curve.P2.distanceToSquared(curve.P3) +
-        curve.P3.distanceToSquared(curve.P4)) * CuspDerivativeLengthScale;
+function maybeAddCuspArc(builder, toPoint) {
+    if (builder.needsCuspArc) {
+        builder.needsCuspArc = false;
+
+        arcTo(builder, builder.cuspPoint, toPoint, builder.cuspArcClockwise);
+
+        builder.cuspPoint = new FloatPoint();
+        builder.cuspArcClockwise = false;
+    }
 }
 
 
-function acceptOffset(original, translated, offset, maximumError) {
+/**
+ * Returns true if the curve is close enough to be considered parallel to the
+ * original curve.
+ *
+ * @param original The original curve.
+ *
+ * @param parallel Candidate parallel curve to be tested.
+ *
+ * @param offset Offset from original curve to candidate parallel curve.
+ *
+ * @param maximumError Maximum allowed error.
+ */
+function acceptOffset(original, parallel, offset, maximumError) {
     // Using shape control method, sometimes output curve becomes completely
     // off in some situations involving start and end tangents being almost
     // parallel. These two checks are to prevent accepting such curves as good.
     if (FloatPoint.isTriangleClockwise(original.P1, original.P2, original.P4) !=
-        FloatPoint.isTriangleClockwise(translated.P1, translated.P2, translated.P4)) {
+        FloatPoint.isTriangleClockwise(parallel.P1, parallel.P2, parallel.P4)) {
         return false;
     }
 
     if (FloatPoint.isTriangleClockwise(original.P1, original.P3, original.P4) !=
-        FloatPoint.isTriangleClockwise(translated.P1, translated.P3, translated.P4)) {
+        FloatPoint.isTriangleClockwise(parallel.P1, parallel.P3, parallel.P4)) {
         return false;
     }
 
@@ -1606,13 +1813,13 @@ function acceptOffset(original, translated, offset, maximumError) {
         const p0 = original.pointAt(t);
         const n = original.normalVector(t);
 
-        const roots = translated.findRayIntersections(p0, p0.plus(n));
+        const roots = parallel.findRayIntersections(p0, p0.plus(n));
 
         if (roots.length != 1) {
             return false;
         }
 
-        const p1 = translated.pointAt(roots[0]);
+        const p1 = parallel.pointAt(roots[0]);
         const d = p0.distanceTo(p1);
         const error = Math.abs(d - Math.abs(offset));
 
@@ -1625,14 +1832,7 @@ function acceptOffset(original, translated, offset, maximumError) {
 }
 
 
-function arcOffset(builder, offset, center, from, to)
-{
-    const orientation = FloatPoint.determineTriangleOrientation(center, from, to);
-
-    //ASSERT(orientation != TrianglePointOrientation::Collinear);
-
-    const clockwise = orientation == TrianglePointOrientation.Clockwise;
-
+function arcOffset(builder, offset, center, from, to, clockwise) {
     var line = new FloatLine(center, to);
 
     if (clockwise) {
@@ -1641,48 +1841,85 @@ function arcOffset(builder, offset, center, from, to)
         line.extendByLengthFront(-offset);
     }
 
-    if (builder.NeedsCuspArc) {
-        builder.NeedsCuspArc = false;
+    var l2 = new FloatLine(center, from);
 
-        var l2 = new FloatLine(center, from);
-
-        if (clockwise) {
-            l2.extendByLengthFront(offset);
-        } else {
-            l2.extendByLengthFront(-offset);
-        }
-
-        arcTo(builder, builder.CuspPoint, l2.P2, builder.CuspArcClockwise);
-
-        builder.CuspPoint = new FloatPoint(0, 0);
-        builder.CuspArcClockwise = false;
+    if (clockwise) {
+        l2.extendByLengthFront(offset);
+    } else {
+        l2.extendByLengthFront(-offset);
     }
+
+    maybeAddCuspArc(builder, l2.P2);
 
     arcTo(builder, center, line.P2, clockwise);
 }
 
 
+function unitTurn(point1, point2, point3) {
+    return point2.minus(point1).unitVector().cross(point3.minus(point1).unitVector());
+}
+
+
 /**
- * Returns true if start and end tangents of a curve do not point to the
- * opposite sides of line connecting start and end points of a curve.
- *
- * @param startTangent The start tangent of a curve. P1 is the first point of
- * a curve and P2 is point P2, P3 or P4 of a curve, depending which is the
- * first point not equal to the first point of a curve.
- *
- * @param endTangent The end tangent of a curve. P1 is the last point of a
- * curve and P2 is point P3, P2 or P1 of a curve, depending which is the
- * first point not equal to the last point of a curve.
+ * Represents curve tangents as two line segments and some precomputed data.
  */
-function tangentsSameSide(startTangent, endTangent) {
-    const turn0 = FloatPoint.turn(startTangent.P1, startTangent.P2,
-        endTangent.P1);
+class CurveTangentData {
+    startTangent = null;
+    endTangent = null;
+    turn1 = 0;
+    turn2 = 0;
+    startUnitNormal = null;
+    endUnitNormal = null;
 
-    const turn1 = FloatPoint.turn(startTangent.P1, endTangent.P2,
-        endTangent.P1);
+    constructor(curve) {
+        this.startTangent = curve.startTangent();
+        this.endTangent = curve.endTangent();
+        this.turn1 = unitTurn(this.startTangent.P1, this.startTangent.P2,
+            this.endTangent.P1);
+        this.turn2 = unitTurn(this.startTangent.P1, this.endTangent.P2,
+            this.endTangent.P1);
+        this.startUnitNormal = this.startTangent.unitNormalVector();
+        this.endUnitNormal = this.endTangent.unitNormalVector();
+    }
+};
 
-    return fuzzyIsZero(turn0) || fuzzyIsZero(turn1) ||
-        ((turn0 < 0.0) == (turn1 < 0.0));
+
+/**
+ * Returns true if an attempt to approximate a curve with given tangents
+ * should be made.
+ */
+function canTryArcOffset(d) {
+    // Arc approximation is only attempted if curve is not considered
+    // approximately straight. But it can be attemped for curves which have
+    // their control points on the different sides of line connecting points
+    // P1 and P4.
+    //
+    // We need to make sure we don't try to do arc approximation for these S
+    // type curves because such curves cannot be approximated by arcs in such
+    // cases.
+
+    const P = ApproximatelyStraightCurveTestApsilon;
+    const N = -P;
+
+    return (d.turn1 >= P && d.turn2 >= P) || (d.turn1 <= N && d.turn2 <= N);
+}
+
+
+/**
+ * Returns true if an attempt to use simple offsetting for a curve with given
+ * tangents should be made.
+ */
+function canTrySimpleOffset(d) {
+    // Arc approximation is only attempted if curve is not considered
+    // approximately straight. But it can be attemped for curves which have
+    // their control points on the different sides of line connecting points
+    // P1 and P4.
+    //
+    // We need to make sure we don't try to do arc approximation for these S
+    // type curves because the shape control method behaves really badly with
+    // S shape curves.
+
+    return (d.turn1 >= 0 && d.turn2 >= 0) || (d.turn1 <= 0 && d.turn2 <= 0);
 }
 
 
@@ -1699,11 +1936,12 @@ function curveIsTooTiny(curve) {
 }
 
 
-function trySimpleCurveOffset(curve, builder, offset, maximumError) {
-    const startTangent = curve.startTangent();
-    const endTangent = curve.endTangent();
-
-    if (!tangentsSameSide(startTangent, endTangent)) {
+/**
+ * Attempts to perform simple curve offsetting and returns true if it succeeds
+ * to generate good enough parallel curve.
+ */
+function trySimpleCurveOffset(curve, d, builder, offset, maximumError) {
+    if (!canTrySimpleOffset(d)) {
         return false;
     }
 
@@ -1716,10 +1954,10 @@ function trySimpleCurveOffset(curve, builder, offset, maximumError) {
     }
 
     // Start point.
-    const p1 = startTangent.P1.plus(startTangent.unitNormalVector().multiplyScalar(offset));
+    const p1 = d.startTangent.P1.plus(d.startTangent.unitNormalVector().multiplyScalar(offset));
 
     // End point.
-    const p4 = endTangent.P1.minus(endTangent.unitNormalVector().multiplyScalar(offset));
+    const p4 = d.endTangent.P1.minus(d.endTangent.unitNormalVector().multiplyScalar(offset));
 
     // Middle point.
     const mp = curve.pointAt(0.5);
@@ -1745,14 +1983,7 @@ function trySimpleCurveOffset(curve, builder, offset, maximumError) {
         return false;
     }
 
-    if (builder.NeedsCuspArc) {
-        builder.NeedsCuspArc = false;
-
-        arcTo(builder, builder.CuspPoint, candidate.P1, builder.CuspArcClockwise);
-
-        builder.CuspPoint = new FloatPoint(0, 0);
-        builder.CuspArcClockwise = false;
-    }
+    maybeAddCuspArc(builder, candidate.P1);
 
     cubicTo(builder, candidate.P2, candidate.P3, candidate.P4);
 
@@ -1760,11 +1991,11 @@ function trySimpleCurveOffset(curve, builder, offset, maximumError) {
 }
 
 
-function arrayContainsCurvePosition(array, value) {
+function arrayContainsCurvePosition(array, value, epsilon) {
     for (let i = 0; i < array.length; i++) {
         const v = array[i];
 
-        if (isEqualWithEpsilon(value, v, 1e-7)) {
+        if (isEqualWithEpsilon(value, v, epsilon)) {
             return true;
         }
     }
@@ -1773,7 +2004,7 @@ function arrayContainsCurvePosition(array, value) {
 }
 
 
-function mergeCurvePositions(array, na) {
+function mergeCurvePositions(array, na, epsilon) {
     const va = array.concat(na);
 
     var gx = []
@@ -1781,11 +2012,11 @@ function mergeCurvePositions(array, na) {
     for (let i = 0; i < va.length; i++) {
         const v = va[i];
 
-        if (isZeroWithEpsilon(v, 1e-7)) {
+        if (isZeroWithEpsilon(v, epsilon)) {
             continue;
         }
 
-        if (isEqualWithEpsilon(v, 1.0, 1e-7)) {
+        if (isEqualWithEpsilon(v, 1.0, epsilon)) {
             continue;
         }
 
@@ -1797,15 +2028,6 @@ function mergeCurvePositions(array, na) {
     }
 
     return gx;
-}
-
-
-function splitAndRecurse(curve, builder, offset, maximumError) {
-    const curves = curve.split();
-
-    for (let i = 0; i < curves.length; i++) {
-        approximateBezier(curves[i], builder, offset, maximumError);
-    }
 }
 
 
@@ -1856,10 +2078,16 @@ function lineCircleIntersect(line, circleCenter, circleRadius) {
  * @param maximumError Maximum allowed error.
  */
 function goodArc(arcCenter, arcRadius, curve, maximumError, tFrom, tTo) {
+    if (arcRadius > MaximumArcRadius) {
+        return false;
+    }
+
+    const e = Math.min(maximumError, arcRadius / 3.0);
+
     // Calculate value equal to slightly more than half of maximum error.
     // Slightly more to minimize false negatives due to finite precision in
     // circle-line intersection test.
-    const me = (maximumError * (0.5 + 1e-4));
+    const me = (e * (0.5 + 1e-4));
 
     for (let i = 0; i < ArcProbePositions.length; i++) {
         const t = ArcProbePositions[i];
@@ -1889,17 +2117,14 @@ function goodArc(arcCenter, arcRadius, curve, maximumError, tFrom, tTo) {
 /**
  * Attempts to use circular arc offsetting method on a given curve.
  */
-function tryArcApproximation(curve, builder, offset, maximumError) {
-    const startTangent = curve.startTangent();
-    const endTangent = curve.endTangent();
-
-    if (!tangentsSameSide(startTangent, endTangent)) {
+function tryArcApproximation(curve, d, builder, offset, maximumError) {
+    if (!canTryArcOffset(d)) {
         return false;
     }
 
     // Cast ray from curve end points to start and end tangent directions.
-    const vectorFrom = startTangent.unitVector();
-    const vectorTo = endTangent.unitVector();
+    const vectorFrom = d.startTangent.unitVector();
+    const vectorTo = d.endTangent.unitVector();
     const denom = vectorTo.X * vectorFrom.Y - vectorTo.Y * vectorFrom.X;
 
     // Should not happen as we already elliminated parallel case.
@@ -1907,8 +2132,8 @@ function tryArcApproximation(curve, builder, offset, maximumError) {
         return false;
     }
 
-    const asv = startTangent.P1;
-    const bsv = endTangent.P1;
+    const asv = d.startTangent.P1;
+    const bsv = d.endTangent.P1;
     const u = ((bsv.Y - asv.Y) * vectorTo.X - (bsv.X - asv.X) * vectorTo.Y) / denom;
     const v = ((bsv.Y - asv.Y) * vectorFrom.X - (bsv.X - asv.X) * vectorFrom.Y) / denom;
 
@@ -1921,8 +2146,8 @@ function tryArcApproximation(curve, builder, offset, maximumError) {
 
     // If start or end tangents extend too far beyond intersection, return
     // early since it will not result in good approximation.
-    if (curve.P1.distanceToSquared(V) < (startTangent.lengthSquared() * 0.25) ||
-        curve.P4.distanceToSquared(V) < (endTangent.lengthSquared() * 0.25)) {
+    if (curve.P1.distanceToSquared(V) < (d.startTangent.lengthSquared() * 0.25) ||
+        curve.P4.distanceToSquared(V) < (d.endTangent.lengthSquared() * 0.25)) {
         return false;
     }
 
@@ -1935,7 +2160,7 @@ function tryArcApproximation(curve, builder, offset, maximumError) {
     const GP4 = new FloatLine(G, curve.P4);
 
     const E = new FloatLine(P1G.midPoint(), P1G.midPoint().minus(P1G.normalVector()));
-    const E1 = new FloatLine(startTangent.P1, startTangent.P1.minus(startTangent.normalVector()));
+    const E1 = new FloatLine(d.startTangent.P1, d.startTangent.P1.minus(d.startTangent.normalVector()));
     const C1 = E.intersectSimple(E1);
 
     if (C1 == null) {
@@ -1956,21 +2181,23 @@ function tryArcApproximation(curve, builder, offset, maximumError) {
     }
 
     const F = new FloatLine(GP4.midPoint(), GP4.midPoint().minus(GP4.normalVector()));
-    const F1 = new FloatLine(endTangent.P1, endTangent.P1.plus(endTangent.normalVector()));
+    const F1 = new FloatLine(d.endTangent.P1, d.endTangent.P1.plus(d.endTangent.normalVector()));
     const C2 = F.intersectSimple(F1);
 
     if (C2 == null) {
         return false;
     }
 
-    if (C1.equalsWithEpsilon(C2, 1e-8)) {
+    if (C1.equalsWithEpsilon(C2, ArcCenterComparisonEpsilon)) {
         const radius = C1.distanceTo(curve.P1);
+        const clockwise = FloatPoint.isTriangleClockwise(curve.P1, V, curve.P4);
 
         if (goodArc(C1, radius, curve, maximumError, 0, 1)) {
-            arcOffset(builder, offset, C1, curve.P1, curve.P4);
+            arcOffset(builder, offset, C1, curve.P1, curve.P4, clockwise);
             return true;
         }
     } else {
+        const clockwise = FloatPoint.isTriangleClockwise(curve.P1, V, curve.P4);
         const radius1 = C1.distanceTo(curve.P1);
 
         if (!goodArc(C1, radius1, curve, maximumError, 0, tG)) {
@@ -1983,8 +2210,8 @@ function tryArcApproximation(curve, builder, offset, maximumError) {
             return false;
         }
 
-        arcOffset(builder, offset, C1, curve.P1, G);
-        arcOffset(builder, offset, C2, G, curve.P4);
+        arcOffset(builder, offset, C1, curve.P1, G, clockwise);
+        arcOffset(builder, offset, C2, G, curve.P4, clockwise);
 
         return true;
     }
@@ -1993,53 +2220,76 @@ function tryArcApproximation(curve, builder, offset, maximumError) {
 }
 
 
-/**
- * Attempts to find circular arc for curve before anything else is attempted.
- * Since this runs before curve is subdivided at inflection points, curve is
- * completely arbitrary and may have its control points on different sides of
- * line connecting start and end points. So before actual arc approximation
- * happens, first it tries to determine if control points are in correct
- * places. This saves us at least one cubic root finding attempt.
- */
-function tryFirstArcApproximation(curve, builder, offset, maximumError) {
-    const startTangent = curve.startTangent();
-    const endTangent = curve.endTangent();
+function isCurveApproximatelyStraight(d) {
+    const minx = Math.min(d.startTangent.x1(), d.endTangent.x1());
+    const miny = Math.min(d.startTangent.y1(), d.endTangent.y1());
+    const maxx = Math.max(d.startTangent.x1(), d.endTangent.x1());
+    const maxy = Math.max(d.startTangent.y1(), d.endTangent.y1());
 
-    if (!tangentsSameSide(startTangent, endTangent)) {
-        // Control points are not on the same side of line connecting start
-        // and end points of the curve. Arc cannot be found for this curve.
-        return false;
-    }
+    const x2 = d.startTangent.x2();
+    const y2 = d.startTangent.y2();
+    const x3 = d.endTangent.x2();
+    const y3 = d.endTangent.y2();
 
-    return tryArcApproximation(curve, builder, offset, maximumError);
+    // Is P2 located between P1 and P4?
+    return minx <= x2 &&
+        miny <= y2 &&
+        maxx >= x2 &&
+        maxy >= y2 &&
+        // Is P3 located between P1 and P4?
+        minx <= x3 &&
+        miny <= y3 &&
+        maxx >= x3 &&
+        maxy >= y3 &&
+        // Are all points collinear?
+        isZeroWithEpsilon(d.turn1,
+            ApproximatelyStraightCurveTestApsilon) &&
+        isZeroWithEpsilon(d.turn2,
+            ApproximatelyStraightCurveTestApsilon);
+}
+
+
+function curveIsCompletelyStraight(d) {
+    return isZeroWithEpsilon(d.turn1, CompletelyStraightCurveTestApsilon) &&
+        isZeroWithEpsilon(d.turn2, CompletelyStraightCurveTestApsilon);
 }
 
 
 /**
  * Main function for approximating offset of a curve without cusps.
  */
-function approximateBezier(curve, builder, offset, maximumError) {
-    if (!curve.isPoint()) {
-        if (curve.isStraight()) {
-            const line = new FloatLine(curve.P1, curve.P2);
-            const normal = line.unitNormalVector();
+function approximateBezier(curve, d, builder, offset, maximumError) {
+    if (!curve.isPointWithEpsilon(CurvePointClumpTestEpsilon)) {
+        if (isCurveApproximatelyStraight(d)) {
+            if (curveIsCompletelyStraight(d)) {
+                // Curve is extremely close to being straight.
+                const line = new FloatLine(curve.P1, curve.P2);
+                const normal = line.unitNormalVector();
 
-            if (builder.NeedsCuspArc) {
-                builder.NeedsCuspArc = false;
+                maybeAddCuspArc(builder, line.P1.plus(normal.multiplyScalar(offset)));
 
-                arcTo(builder, builder.CuspPoint,
-                    line.P1.plus(normal.multiplyScalar(offset)),
-                    builder.CuspArcClockwise);
+                lineTo(builder, line.P2.plus(normal.multiplyScalar(offset)));
+            } else {
+                const p1o = d.startTangent.P1.plus(d.startUnitNormal.multiplyScalar(offset));
+                const p2o = d.startTangent.P2.plus(d.startUnitNormal.multiplyScalar(offset));
+                const p3o = d.endTangent.P2.minus(d.endUnitNormal.multiplyScalar(offset));
+                const p4o = d.endTangent.P1.minus(d.endUnitNormal.multiplyScalar(offset));
 
-                builder.CuspPoint = new FloatPoint(0, 0);
-                builder.CuspArcClockwise = false;
+                maybeAddCuspArc(builder, p1o);
+
+                cubicTo(builder, p2o, p3o, p4o);
             }
-
-            lineTo(builder, line.P2.plus(normal.multiplyScalar(offset)));
         } else {
-            if (!trySimpleCurveOffset(curve, builder, offset, maximumError)) {
-                if (!tryArcApproximation(curve, builder, offset, maximumError)) {
-                    splitAndRecurse(curve, builder, offset, maximumError);
+            if (!trySimpleCurveOffset(curve, d, builder, offset, maximumError)) {
+                if (!tryArcApproximation(curve, d, builder, offset, maximumError)) {
+                    // Split in half and continue.
+                    const curves = curve.split();
+
+                    for (let i = 0; i < curves.length; i++) {
+                        const da = new CurveTangentData(curves[i]);
+
+                        approximateBezier(curves[i], da, builder, offset, maximumError);
+                    }
                 }
             }
         }
@@ -2047,11 +2297,10 @@ function approximateBezier(curve, builder, offset, maximumError) {
 }
 
 
-function findPositionOnCurveWithLargeEnoughDerivative(curve, previousT, currentT, curvePrecision) {
-    //ASSERT(currentT > previousT);
-    //ASSERT(curvePrecision > DBL_EPSILON);
+function findPositionOnCurveWithLargeEnoughDerivative(curve, previousT, currentT) {
+    // ASSERT(currentT > previousT);
 
-    const precision = curvePrecision * 2.0;
+    const kPrecision = CuspDerivativeLengthSquared * 2.0;
 
     var t = Math.max(interpolateLinear(previousT, currentT, 0.8), currentT - 0.05);
 
@@ -2059,7 +2308,7 @@ function findPositionOnCurveWithLargeEnoughDerivative(curve, previousT, currentT
         const derivative = curve.derivedAt(t);
         const lengthSquared = derivative.lengthSquared();
 
-        if (lengthSquared < precision) {
+        if (lengthSquared < kPrecision) {
             return t;
         }
 
@@ -2072,12 +2321,10 @@ function findPositionOnCurveWithLargeEnoughDerivative(curve, previousT, currentT
 }
 
 
-function findPositionOnCurveWithLargeEnoughDerivativeStart(curve, currentT, nextT, curvePrecision)
-{
-    //ASSERT(currentT < nextT);
-    //ASSERT(curvePrecision > DBL_EPSILON);
+function findPositionOnCurveWithLargeEnoughDerivativeStart(curve, currentT, nextT) {
+    // ASSERT(currentT < nextT);
 
-    const precision = curvePrecision * 2.0;
+    const kPrecision = CuspDerivativeLengthSquared * 2.0;
 
     var t = Math.min(interpolateLinear(currentT, nextT, 0.2), currentT + 0.05);
 
@@ -2085,7 +2332,7 @@ function findPositionOnCurveWithLargeEnoughDerivativeStart(curve, currentT, next
         const derivative = curve.derivedAt(t);
         const lengthSquared = derivative.lengthSquared();
 
-        if (lengthSquared < precision) {
+        if (lengthSquared < kPrecision) {
             return t;
         }
 
@@ -2095,14 +2342,6 @@ function findPositionOnCurveWithLargeEnoughDerivativeStart(curve, currentT, next
     }
 
     return t;
-}
-
-
-function curveIsFlat(curve) {
-    const chord = new FloatLine(curve.P1, curve.P4);
-
-    return chord.isPointOnLine(curve.P2) &&
-        chord.isPointOnLine(curve.P3);
 }
 
 
@@ -2159,14 +2398,14 @@ function offsetLinearCuspyCurve(curve, builder, offset, maximumCurvaturePoints) 
 }
 
 
-function doApproximateBezier(curve, builder, offset, maximumError) {
+function doApproximateBezier(curve, d, builder, offset, maximumError) {
     // First find maximum curvature positions.
     const maximumCurvaturePositions = curve.findMaxCurvature();
 
     // Handle special case where the input curve is a straight line, but
     // control points do not necessary lie on line segment between curve
     // points P1 and P4.
-    if (curveIsFlat(curve)) {
+    if (curveIsCompletelyStraight(curve)) {
         offsetLinearCuspyCurve(curve, builder, offset,
             maximumCurvaturePositions);
         return;
@@ -2182,10 +2421,8 @@ function doApproximateBezier(curve, builder, offset, maximumError) {
 
     if (t.length == 0) {
         // No initial subdivision suggestions.
-        approximateBezier(curve, builder, offset, maximumError);
+        approximateBezier(curve, d, builder, offset, maximumError);
     } else {
-        const precision = findCubicPrecision(curve);
-
         var previousT = 0;
 
         for (let i = 0; i < t.length; i++) {
@@ -2193,7 +2430,7 @@ function doApproximateBezier(curve, builder, offset, maximumError) {
             const derivative = curve.derivedAt(T);
             const lengthSquared = derivative.lengthSquared();
 
-            if (lengthSquared < precision) {
+            if (lengthSquared < CuspDerivativeLengthSquared) {
                 // Squared length of derivative becomes tiny. This is where
                 // the cusp is. The goal here is to find a spon on curve,
                 // located before T which has large enough derivative and draw
@@ -2201,23 +2438,24 @@ function doApproximateBezier(curve, builder, offset, maximumError) {
                 // derivative.
 
                 const t1 = findPositionOnCurveWithLargeEnoughDerivative(
-                    curve, previousT, T, precision);
+                    curve, previousT, T);
 
-                //ASSERT(t1 < T);
+                // ASSERT(t1 < T);
 
                 const k = curve.getSubcurve(previousT, t1);
+                const nd = new CurveTangentData(k);
 
-                approximateBezier(k, builder, offset, maximumError);
+                approximateBezier(k, nd, builder, offset, maximumError);
 
                 const t2 = findPositionOnCurveWithLargeEnoughDerivativeStart(
-                    curve, T, i == (t.length - 1) ? 1.0 : t[i + 1], precision);
+                    curve, T, i == (t.length - 1) ? 1.0 : t[i + 1]);
 
-                //ASSERT(t2 > T);
+                // ASSERT(t2 > T);
 
-                builder.CuspPoint = curve.pointAt(T);
-                builder.NeedsCuspArc = true;
-                builder.CuspArcClockwise = FloatPoint.isTriangleClockwise(
-                    k.P4, builder.CuspPoint, curve.pointAt(t2));
+                builder.cuspPoint = curve.pointAt(T);
+                builder.needsCuspArc = true;
+                builder.cuspArcClockwise = FloatPoint.isTriangleClockwise(
+                    k.P4, builder.cuspPoint, curve.pointAt(t2));
 
                 previousT = t2;
             } else {
@@ -2225,66 +2463,36 @@ function doApproximateBezier(curve, builder, offset, maximumError) {
                 // to offset approximation function.
 
                 const k = curve.getSubcurve(previousT, T);
+                const nd = new CurveTangentData(k);
 
-                approximateBezier(k, builder, offset, maximumError);
+                approximateBezier(k, nd, builder, offset, maximumError);
 
                 previousT = T;
             }
         }
 
-        //ASSERT(previousT < 1.0);
+        // ASSERT(previousT < 1.0);
 
-        approximateBezier(curve.getSubcurve(previousT, 1.0), builder, offset,
-            maximumError);
+        const k = curve.getSubcurve(previousT, 1.0);
+        const nd = new CurveTangentData(k);
+
+        approximateBezier(k, nd, builder, offset, maximumError);
     }
 }
 
 
 /**
- * Adjusts maximum error value to reflect scale of the input curve. If curve
- * is very small, maximum error should also be smaller to maintain acceptable
- * offset quality.
+ * Flattens ends of curves if control points are too close to end points.
  */
-function adjustMaximumErrorForCurve(curve, maximumError) {
-    const a = clamp(maximumError, 0.0001, 10.0);
-
-    const squaredLengths =
-        curve.P1.distanceToSquared(curve.P2) +
-        curve.P2.distanceToSquared(curve.P3) +
-        curve.P3.distanceToSquared(curve.P4);
-
-    // Caller must ensure curve is not a point.
-    // ASSERT(squaredLengths > 0);
-
-    const b = Math.sqrt(squaredLengths * 6e-4);
-
-    const c = clamp(b, 0.05, 1.0);
-
-    return interpolateLinear(0.00001, a, c);
-}
-
-
 function fixRedundantTangents(curve) {
-    const P1ToP2Squared = curve.P1.distanceToSquared(curve.P2);
-    const P3ToP4Squared = curve.P3.distanceToSquared(curve.P4);
-
-    const remainingLengthsSquared =
-        curve.P2.distanceToSquared(curve.P3) +
-        curve.P1.distanceToSquared(curve.P4);
-
-    const perimeterSquared = P1ToP2Squared + P3ToP4Squared +
-        remainingLengthsSquared;
-
-    //ASSERT(perimeterSquared > 0.0);
-
     var p2 = curve.P2;
     var p3 = curve.P3;
 
-    if ((P1ToP2Squared / perimeterSquared) < 3e-8) {
+    if (curve.P1.distanceToSquared(p2) < 1e-12) {
         p2 = curve.P1;
     }
 
-    if ((P3ToP4Squared / perimeterSquared) < 3e-8) {
+    if (curve.P4.distanceToSquared(p3) < 1e-12) {
         p3 = curve.P4;
     }
 
@@ -2292,61 +2500,84 @@ function fixRedundantTangents(curve) {
 }
 
 
-/**
- * Find a set of segments that approximate parallel curve.
- *
- * @param curve Input curve.
- *
- * @param offset Offset amount. If it is zero, resulting curve will be
- * identical to input curve. Can be negative.
- *
- * @param maximumError Maximum error. Lower value means better precision and
- * more output segments. Larger value means worse precision, but fewer output
- * segments.
- *
- * @param builder Output receiver.
- */
 function offsetCurve(curve, offset, maximumError, builder) {
-    if (curve.isPoint()) {
+    builder.reset();
+
+    const minx = min4(curve.P1.X, curve.P2.X, curve.P3.X, curve.P4.X);
+    const maxx = max4(curve.P1.X, curve.P2.X, curve.P3.X, curve.P4.X);
+    const miny = min4(curve.P1.Y, curve.P2.Y, curve.P3.Y, curve.P4.Y);
+    const maxy = max4(curve.P1.Y, curve.P2.Y, curve.P3.Y, curve.P4.Y);
+
+    const dx = maxx - minx;
+    const dy = maxy - miny;
+
+    if (dx < CurvePointClumpTestEpsilon && dy < CurvePointClumpTestEpsilon) {
         return;
     }
 
-    if (fuzzyIsZero(offset)) {
-        moveTo(builder, curve.P1);
+    // Select bigger of width and height.
+    const m = Math.max(dx, dy) / 2.0;
 
-        cubicTo(builder, curve.P2, curve.P3, curve.P4);
+    // Calculate scaled offset.
+    const so = offset / m;
 
+    if (fuzzyIsZero(so)) {
+        builder.addCubic(curve.P1, curve.P2, curve.P3, curve.P4);
         return;
     }
 
-    const c = fixRedundantTangents(curve);
+    // Calculate "normalized" curve which kind of fits into range from -1 to 1.
+    const tx = (minx + maxx) / 2.0;
+    const ty = (miny + maxy) / 2.0;
+    const t = new FloatPoint(tx, ty);
 
-    if (c.isStraight()) {
-        // Curve is straight, use simple line translation instead.
-        const line = new FloatLine(c.P1, c.P4);
-        const normal = line.unitNormalVector();
-        const translated = line.translated(normal.multiplyScalar(offset));
+    const p1 = curve.P1.minus(t);
+    const p2 = curve.P2.minus(t);
+    const p3 = curve.P3.minus(t);
+    const p4 = curve.P4.minus(t);
 
-        moveTo(builder, translated.P1);
+    const sc = new CubicCurve(p1.divideScalar(m), p2.divideScalar(m),
+        p3.divideScalar(m), p4.divideScalar(m));
 
-        lineTo(builder, translated.P2);
+    const c = fixRedundantTangents(sc);
+
+    b = new OutputBuilder(builder, m, t);
+
+    const d = new CurveTangentData(c);
+
+    if (isCurveApproximatelyStraight(d)) {
+        if (curveIsCompletelyStraight(d)) {
+            // Curve is extremely close to being straight, use simple line
+            // translation.
+            const line = new FloatLine(c.P1, c.P4);
+            const normal = line.unitNormalVector();
+            const translated = line.translated(normal.multiplyScalar(so));
+
+            moveTo(b, translated.P1);
+
+            lineTo(b, translated.P2);
+        } else {
+            // Curve is almost straight. Translate start and end tangents
+            // separately and generate a cubic curve.
+            const p1o = d.startTangent.P1.plus(d.startUnitNormal.multiplyScalar(so));
+            const p2o = d.startTangent.P2.plus(d.startUnitNormal.multiplyScalar(so));
+            const p3o = d.endTangent.P2.minus(d.endUnitNormal.multiplyScalar(so));
+            const p4o = d.endTangent.P1.minus(d.endUnitNormal.multiplyScalar(so));
+
+            moveTo(b, p1o);
+
+            cubicTo(b, p2o, p3o, p4o);
+        }
     } else {
         // Arbitrary curve.
-        const startTangent = c.startTangent();
-        const startTangentNormal = startTangent.unitNormalVector();
-        const startPoint = startTangent.P1.plus(
-            startTangentNormal.multiplyScalar(offset));
-
-        moveTo(builder, startPoint);
-
-        const me = adjustMaximumErrorForCurve(c, maximumError);
+        moveTo(b, d.startTangent.P1.plus(d.startUnitNormal.multiplyScalar(so)));
 
         // Try arc approximation first in case this curve was intended to
         // approximate circle. If that is indeed true, we avoid a lot of
         // expensive calculations like finding inflection and maximum
         // curvature points.
-        if (!tryFirstArcApproximation(c, builder, offset, me)) {
-            doApproximateBezier(c, builder, offset, me);
+        if (!tryArcApproximation(c, d, b, so, maximumError)) {
+            doApproximateBezier(c, d, b, so, maximumError);
         }
     }
 }

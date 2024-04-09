@@ -26,10 +26,10 @@ public:
     constexpr CubicCurve(const double p1x, const double p1y, const double p2x,
         const double p2y, const double p3x, const double p3y,
         const double p4x, const double p4y)
-    :   P1(p1x, p1y),
-        P2(p2x, p2y),
-        P3(p3x, p3y),
-        P4(p4x, p4y)
+    :   P0(p1x, p1y),
+        P1(p2x, p2y),
+        P2(p3x, p3y),
+        P3(p4x, p4y)
     {
     }
 
@@ -37,20 +37,20 @@ public:
     /**
      * Constructs cubic curve with given points.
      *
-     * @param p1 Start point of curve.
+     * @param p0 Start point of curve.
      *
-     * @param p2 First control point of curve.
+     * @param p1 First control point of curve.
      *
-     * @param p3 Second control point of curve.
+     * @param p2 Second control point of curve.
      *
-     * @param p4 End point of curve.
+     * @param p3 End point of curve.
      */
-    constexpr CubicCurve(const FloatPoint &p1, const FloatPoint &p2,
-        const FloatPoint &p3, const FloatPoint &p4)
-    :   P1(p1),
+    constexpr CubicCurve(const FloatPoint &p0, const FloatPoint &p1,
+        const FloatPoint &p2, const FloatPoint &p3)
+    :   P0(p0),
+        P1(p1),
         P2(p2),
-        P3(p3),
-        P4(p4)
+        P3(p3)
     {
     }
 
@@ -58,16 +58,16 @@ public:
     /**
      * Constructs cubic curve from quadratic curve parameters.
      */
-    CubicCurve(const FloatPoint &p1, const FloatPoint &p2,
-        const FloatPoint &p3);
+    CubicCurve(const FloatPoint &p0, const FloatPoint &p1,
+        const FloatPoint &p2);
 
 
     /**
      * Constructs cubic curve from a line. First control point of constructed
-     * curve will be on line from p1 and p2 at 1/3rd of distance. Second
-     * control point will be at 2/3rds of distance on line from p1 to p2.
+     * curve will be on line from p0 and p1 at 1/3rd of distance. Second
+     * control point will be at 2/3rds of distance on line from p0 to p1.
      */
-    CubicCurve(const FloatPoint &p1, const FloatPoint &p2);
+    CubicCurve(const FloatPoint &p0, const FloatPoint &p1);
 
 public:
 
@@ -91,8 +91,8 @@ public:
 
     /**
      * Returns start tangent of this curve. Start tangent is a line going from
-     * P1 to P2, P3 or P4, depending which one is the first found to be not
-     * equal to P1.
+     * P0 to P1, P2 or P3, depending which one is the first found to be not
+     * equal to P0.
      *
      * @param epsilon Point comparison tolerance.
      */
@@ -101,8 +101,8 @@ public:
 
     /**
      * Returns end tangent of this curve. Start tangent is a line going from
-     * P4 to P3, P2 or P1, depending which one is the first found to be not
-     * equal to P4.
+     * P3 to P2, P1 or P0, depending which one is the first found to be not
+     * equal to P3.
      *
      * @param epsilon Point comparison tolerance.
      */
@@ -216,23 +216,23 @@ public:
     /**
      * Start point of the curve.
      */
-    FloatPoint P1;
+    FloatPoint P0;
 
 
     /**
      * First control point of the curve.
      */
-    FloatPoint P2;
+    FloatPoint P1;
 
 
     /**
      * Second control point of the curve.
      */
-    FloatPoint P3;
+    FloatPoint P2;
 
 
     /**
      * End point.
      */
-    FloatPoint P4;
+    FloatPoint P3;
 };

@@ -21,13 +21,13 @@ public:
     /**
      * Adds line.
      */
-    void AddLine(const FloatPoint &p1, const FloatPoint &p2);
+    void AddLine(const FloatPoint &p0, const FloatPoint &p1);
 
 
     /**
      * Adds cubic curve.
      */
-    void AddCubic(const FloatPoint &p1, const FloatPoint &cp1,
+    void AddCubic(const FloatPoint &p0, const FloatPoint &cp1,
         const FloatPoint &cp2, const FloatPoint &to);
 
 
@@ -100,18 +100,18 @@ FORCE_INLINE CubicCurveBuilder::~CubicCurveBuilder() {
 }
 
 
-FORCE_INLINE void CubicCurveBuilder::AddLine(const FloatPoint &p1, const FloatPoint &p2) {
+FORCE_INLINE void CubicCurveBuilder::AddLine(const FloatPoint &p0, const FloatPoint &p1) {
     MakeRoomForCurve();
     void *p = mCurves + mCurveCount;
-    new (p) CubicCurve(p1, p2);
+    new (p) CubicCurve(p0, p1);
     mCurveCount++;
 }
 
 
-FORCE_INLINE void CubicCurveBuilder::AddCubic(const FloatPoint &p1, const FloatPoint &cp1, const FloatPoint &cp2, const FloatPoint &to) {
+FORCE_INLINE void CubicCurveBuilder::AddCubic(const FloatPoint &p0, const FloatPoint &cp1, const FloatPoint &cp2, const FloatPoint &to) {
     MakeRoomForCurve();
     void *p = mCurves + mCurveCount;
-    new (p) CubicCurve(p1, cp1, cp2, to);
+    new (p) CubicCurve(p0, cp1, cp2, to);
     mCurveCount++;
 }
 
@@ -119,14 +119,14 @@ FORCE_INLINE void CubicCurveBuilder::AddCubic(const FloatPoint &p1, const FloatP
 FORCE_INLINE FloatPoint CubicCurveBuilder::GetFirstPoint() const {
     ASSERT(mCurveCount > 0);
 
-    return mCurves->P1;
+    return mCurves->P0;
 }
 
 
 FORCE_INLINE FloatPoint CubicCurveBuilder::GetLastPoint() const {
     ASSERT(mCurveCount > 0);
 
-    return mCurves[mCurveCount - 1].P4;
+    return mCurves[mCurveCount - 1].P3;
 }
 
 

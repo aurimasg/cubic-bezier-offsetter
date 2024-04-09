@@ -3,85 +3,85 @@
 #include "Quicksort.h"
 
 
-CubicCurve::CubicCurve(const FloatPoint &p1, const FloatPoint &p2, const FloatPoint &p3)
-:   P1(p1),
-    P4(p3)
+CubicCurve::CubicCurve(const FloatPoint &p0, const FloatPoint &p1, const FloatPoint &p2)
+:   P0(p0),
+    P3(p2)
 {
-    P2.X = p1.X + (2.0 / 3.0) * (p2.X - p1.X);
-    P2.Y = p1.Y + (2.0 / 3.0) * (p2.Y - p1.Y);
-    P3.X = p2.X + (1.0 / 3.0) * (p3.X - p2.X);
-    P3.Y = p2.Y + (1.0 / 3.0) * (p3.Y - p2.Y);
+    P1.X = p0.X + (2.0 / 3.0) * (p1.X - p0.X);
+    P1.Y = p0.Y + (2.0 / 3.0) * (p1.Y - p0.Y);
+    P2.X = p1.X + (1.0 / 3.0) * (p2.X - p1.X);
+    P2.Y = p1.Y + (1.0 / 3.0) * (p2.Y - p1.Y);
 }
 
 
-CubicCurve::CubicCurve(const FloatPoint &p1, const FloatPoint &p2)
-:   P1(p1),
-    P4(p2)
+CubicCurve::CubicCurve(const FloatPoint &p0, const FloatPoint &p1)
+:   P0(p0),
+    P3(p1)
 {
-    P2.X = p1.X + (1.0 / 3.0) * (p2.X - p1.X);
-    P2.Y = p1.Y + (1.0 / 3.0) * (p2.Y - p1.Y);
-    P3.X = p1.X + (2.0 / 3.0) * (p2.X - p1.X);
-    P3.Y = p1.Y + (2.0 / 3.0) * (p2.Y - p1.Y);
+    P1.X = p0.X + (1.0 / 3.0) * (p1.X - p0.X);
+    P1.Y = p0.Y + (1.0 / 3.0) * (p1.Y - p0.Y);
+    P2.X = p0.X + (2.0 / 3.0) * (p1.X - p0.X);
+    P2.Y = p0.Y + (2.0 / 3.0) * (p1.Y - p0.Y);
 }
 
 
 bool CubicCurve::IsPoint(const double tolerance) const
 {
-    return P1.IsEqual(P4, tolerance) and
-        P1.IsEqual(P2, tolerance) and
-        P1.IsEqual(P3, tolerance);
+    return P0.IsEqual(P3, tolerance) and
+        P0.IsEqual(P1, tolerance) and
+        P0.IsEqual(P2, tolerance);
 }
 
 
 bool CubicCurve::IsStraight() const
 {
-    const double minx = Min(P1.X, P4.X);
-    const double miny = Min(P1.Y, P4.Y);
-    const double maxx = Max(P1.X, P4.X);
-    const double maxy = Max(P1.Y, P4.Y);
+    const double minx = Min(P0.X, P3.X);
+    const double miny = Min(P0.Y, P3.Y);
+    const double maxx = Max(P0.X, P3.X);
+    const double maxy = Max(P0.Y, P3.Y);
 
     return
-        // Is P2 located between P1 and P4?
+        // Is P1 located between P0 and P3?
+        minx <= P1.X and
+        miny <= P1.Y and
+        maxx >= P1.X and
+        maxy >= P1.Y and
+        // Is P2 located between P0 and P3?
         minx <= P2.X and
         miny <= P2.Y and
         maxx >= P2.X and
         maxy >= P2.Y and
-        // Is P3 located between P1 and P4?
-        minx <= P3.X and
-        miny <= P3.Y and
-        maxx >= P3.X and
-        maxy >= P3.Y and
         // Are all points collinear?
-        FuzzyIsZero(FloatPoint::Turn(P1, P2, P4)) and
-        FuzzyIsZero(FloatPoint::Turn(P1, P3, P4));
+        FuzzyIsZero(FloatPoint::Turn(P0, P1, P3)) and
+        FuzzyIsZero(FloatPoint::Turn(P0, P2, P3));
 }
 
 
 FloatLine CubicCurve::StartTangent(const double epsilon) const
 {
-    if (P1.IsEqual(P2, epsilon)) {
-        if (P1.IsEqual(P3, epsilon)) {
-            return FloatLine(P1, P4);
+    if (P0.IsEqual(P1, epsilon)) {
+        if (P0.IsEqual(P2, epsilon)) {
+            return FloatLine(P0, P3);
         }
 
-        return FloatLine(P1, P3);
+        return FloatLine(P0, P2);
     }
 
-    return FloatLine(P1, P2);
+    return FloatLine(P0, P1);
 }
 
 
 FloatLine CubicCurve::EndTangent(const double epsilon) const
 {
-    if (P4.IsEqual(P3, epsilon)) {
-        if (P4.IsEqual(P2, epsilon)) {
-            return FloatLine(P4, P1);
+    if (P3.IsEqual(P2, epsilon)) {
+        if (P3.IsEqual(P1, epsilon)) {
+            return FloatLine(P3, P0);
         }
 
-        return FloatLine(P4, P2);
+        return FloatLine(P3, P1);
     }
 
-    return FloatLine(P4, P3);
+    return FloatLine(P3, P2);
 }
 
 
@@ -89,9 +89,9 @@ FloatPoint CubicCurve::PointAt(const double t) const
 {
     const double it = 1.0 - t;
 
-    const FloatPoint a0 = P1 * it + P2 * t;
-    const FloatPoint b0 = P2 * it + P3 * t;
-    const FloatPoint c0 = P3 * it + P4 * t;
+    const FloatPoint a0 = P0 * it + P1 * t;
+    const FloatPoint b0 = P1 * it + P2 * t;
+    const FloatPoint c0 = P2 * it + P3 * t;
 
     const FloatPoint a1 = a0 * it + b0 * t;
     const FloatPoint b1 = b0 * it + c0 * t;
@@ -103,19 +103,19 @@ FloatPoint CubicCurve::PointAt(const double t) const
 FloatPoint CubicCurve::NormalVector(const double t) const
 {
     if (FuzzyIsZero(t)) {
-        if (P1 == P2) {
-            if (P1 == P3) {
-                return FloatLine(P1, P4).NormalVector();
+        if (P0 == P1) {
+            if (P0 == P2) {
+                return FloatLine(P0, P3).NormalVector();
             } else {
-                return FloatLine(P1, P3).NormalVector();
+                return FloatLine(P0, P2).NormalVector();
             }
         }
     } else if (FuzzyIsEqual(t, 1.0)) {
-        if (P3 == P4) {
-            if (P2 == P4) {
-                return FloatLine(P1, P4).NormalVector();
+        if (P2 == P3) {
+            if (P1 == P3) {
+                return FloatLine(P0, P3).NormalVector();
             } else {
-                return FloatLine(P2, P4).NormalVector();
+                return FloatLine(P1, P3).NormalVector();
             }
         }
     }
@@ -142,8 +142,8 @@ FloatPoint CubicCurve::DerivedAt(const double t) const
     const double b = 1.0 - 4.0 * t + 3.0 * d;
     const double c = 2.0 * t - 3.0 * d;
 
-    return 3.0 * FloatPoint(a * P1.X + b * P2.X + c * P3.X + d * P4.X,
-        a * P1.Y + b * P2.Y + c * P3.Y + d * P4.Y);
+    return 3.0 * FloatPoint(a * P0.X + b * P1.X + c * P2.X + d * P3.X,
+        a * P0.Y + b * P1.Y + c * P2.Y + d * P3.Y);
 }
 
 
@@ -154,8 +154,8 @@ FloatPoint CubicCurve::SecondDerivedAt(const double t) const
     const double c = 2.0 - 6.0 * t;
     const double d = 2.0 * t;
 
-    return 3.0 * FloatPoint(a * P1.X + b * P2.X + c * P3.X + d * P4.X,
-        a * P1.Y + b * P2.Y + c * P3.Y + d * P4.Y);
+    return 3.0 * FloatPoint(a * P0.X + b * P1.X + c * P2.X + d * P3.X,
+        a * P0.Y + b * P1.Y + c * P2.Y + d * P3.Y);
 }
 
 
@@ -176,39 +176,39 @@ CubicCurve CubicCurve::GetSubcurve(const double t0, const double t1) const
         }
 
         // Cut at t1 only.
-        const FloatPoint ab = InterpolateLinear(P1, P2, t1);
-        const FloatPoint bc = InterpolateLinear(P2, P3, t1);
-        const FloatPoint cd = InterpolateLinear(P3, P4, t1);
+        const FloatPoint ab = InterpolateLinear(P0, P1, t1);
+        const FloatPoint bc = InterpolateLinear(P1, P2, t1);
+        const FloatPoint cd = InterpolateLinear(P2, P3, t1);
         const FloatPoint abc = InterpolateLinear(ab, bc, t1);
         const FloatPoint bcd = InterpolateLinear(bc, cd, t1);
         const FloatPoint abcd = InterpolateLinear(abc, bcd, t1);
 
-        return CubicCurve(P1, ab, abc, abcd);
+        return CubicCurve(P0, ab, abc, abcd);
     }
 
     if (t1 >= (1.0 - DBL_EPSILON)) {
         // Cut at t0 only.
-        const FloatPoint ab = InterpolateLinear(P1, P2, t0);
-        const FloatPoint bc = InterpolateLinear(P2, P3, t0);
-        const FloatPoint cd = InterpolateLinear(P3, P4, t0);
+        const FloatPoint ab = InterpolateLinear(P0, P1, t0);
+        const FloatPoint bc = InterpolateLinear(P1, P2, t0);
+        const FloatPoint cd = InterpolateLinear(P2, P3, t0);
         const FloatPoint abc = InterpolateLinear(ab, bc, t0);
         const FloatPoint bcd = InterpolateLinear(bc, cd, t0);
         const FloatPoint abcd = InterpolateLinear(abc, bcd, t0);
 
-        return CubicCurve(abcd, bcd, cd, P4);
+        return CubicCurve(abcd, bcd, cd, P3);
     }
 
     // Cut at both t0 and t1.
-    const FloatPoint ab0 = InterpolateLinear(P1, P2, t1);
-    const FloatPoint bc0 = InterpolateLinear(P2, P3, t1);
-    const FloatPoint cd0 = InterpolateLinear(P3, P4, t1);
+    const FloatPoint ab0 = InterpolateLinear(P0, P1, t1);
+    const FloatPoint bc0 = InterpolateLinear(P1, P2, t1);
+    const FloatPoint cd0 = InterpolateLinear(P2, P3, t1);
     const FloatPoint abc0 = InterpolateLinear(ab0, bc0, t1);
     const FloatPoint bcd0 = InterpolateLinear(bc0, cd0, t1);
     const FloatPoint abcd0 = InterpolateLinear(abc0, bcd0, t1);
 
     const double m = t0 / t1;
 
-    const FloatPoint ab1 = InterpolateLinear(P1, ab0, m);
+    const FloatPoint ab1 = InterpolateLinear(P0, ab0, m);
     const FloatPoint bc1 = InterpolateLinear(ab0, abc0, m);
     const FloatPoint cd1 = InterpolateLinear(abc0, abcd0, m);
     const FloatPoint abc1 = InterpolateLinear(ab1, bc1, m);
@@ -350,12 +350,12 @@ static int FindCubicRoots(const double coe0, const double coe1, const double coe
         const double theta = Acos(Clamp(R / Sqrt(Q3), -1.0, 1.0));
         const double negative2RootQ = -2.0 * Sqrt(Q);
 
-        const double x1 = negative2RootQ * Cos(theta / 3.0) - adiv3;
-        const double x2 = negative2RootQ * Cos((theta + 2.0 * M_PI) / 3.0) - adiv3;
+        const double x0 = negative2RootQ * Cos(theta / 3.0) - adiv3;
+        const double x1 = negative2RootQ * Cos((theta + 2.0 * M_PI) / 3.0) - adiv3;
         const double x3 = negative2RootQ * Cos((theta - 2.0 * M_PI) / 3.0) - adiv3;
 
-        int n = AcceptRoot(roots, x1);
-        n += AcceptRoot(roots + n, x2);
+        int n = AcceptRoot(roots, x0);
+        n += AcceptRoot(roots + n, x1);
         n += AcceptRoot(roots + n, x3);
 
         Quicksort(roots, n, [](const double a, const double b) -> bool {
@@ -383,18 +383,18 @@ static int FindCubicRoots(const double coe0, const double coe1, const double coe
 
 int CubicCurve::FindMaxCurvature(double *tValues) const
 {
-    const double axx = P2.X - P1.X;
-    const double bxx = P3.X - 2.0 * P2.X + P1.X;
-    const double cxx = P4.X + 3.0 * (P2.X - P3.X) - P1.X;
+    const double axx = P1.X - P0.X;
+    const double bxx = P2.X - 2.0 * P1.X + P0.X;
+    const double cxx = P3.X + 3.0 * (P1.X - P2.X) - P0.X;
 
     const double cox0 = cxx * cxx;
     const double cox1 = 3.0 * bxx * cxx;
     const double cox2 = 2.0 * bxx * bxx + cxx * axx;
     const double cox3 = axx * bxx;
 
-    const double ayy = P2.Y - P1.Y;
-    const double byy = P3.Y - 2.0 * P2.Y + P1.Y;
-    const double cyy = P4.Y + 3.0 * (P2.Y - P3.Y) - P1.Y;
+    const double ayy = P1.Y - P0.Y;
+    const double byy = P2.Y - 2.0 * P1.Y + P0.Y;
+    const double cyy = P3.Y + 3.0 * (P1.Y - P2.Y) - P0.Y;
 
     const double coy0 = cyy * cyy;
     const double coy1 = 3.0 * byy * cyy;
@@ -412,12 +412,12 @@ int CubicCurve::FindMaxCurvature(double *tValues) const
 
 int CubicCurve::FindInflections(double *tValues) const
 {
-    const double ax = P2.X - P1.X;
-    const double ay = P2.Y - P1.Y;
-    const double bx = P3.X - 2.0 * P2.X + P1.X;
-    const double by = P3.Y - 2.0 * P2.Y + P1.Y;
-    const double cx = P4.X + 3.0 * (P2.X - P3.X) - P1.X;
-    const double cy = P4.Y + 3.0 * (P2.Y - P3.Y) - P1.Y;
+    const double ax = P1.X - P0.X;
+    const double ay = P1.Y - P0.Y;
+    const double bx = P2.X - 2.0 * P1.X + P0.X;
+    const double by = P2.Y - 2.0 * P1.Y + P0.Y;
+    const double cx = P3.X + 3.0 * (P1.X - P2.X) - P0.X;
+    const double cy = P3.Y + 3.0 * (P1.Y - P2.Y) - P0.Y;
 
     return FindQuadraticRoots(bx * cy - by * cx, ax * cy - ay * cx,
         ax * by - ay * bx, tValues);
@@ -426,23 +426,23 @@ int CubicCurve::FindInflections(double *tValues) const
 
 void CubicCurve::Split(CubicCurve &l, CubicCurve &r) const
 {
-    const FloatPoint c = (P2 + P3) * 0.5;
+    const FloatPoint c = (P1 + P2) * 0.5;
 
-    const FloatPoint aP2 = (P1 + P2) * 0.5;
-    const FloatPoint bP3 = (P3 + P4) * 0.5;
+    const FloatPoint aP2 = (P0 + P1) * 0.5;
+    const FloatPoint bP3 = (P2 + P3) * 0.5;
     const FloatPoint aP3 = (aP2 + c) * 0.5;
     const FloatPoint bP2 = (bP3 + c) * 0.5;
     const FloatPoint m = (aP3 + bP2) * 0.5;
 
-    l.P1 = P1;
-    l.P2 = aP2;
-    l.P3 = aP3;
-    l.P4 = m;
+    l.P0 = P0;
+    l.P1 = aP2;
+    l.P2 = aP3;
+    l.P3 = m;
 
-    r.P1 = m;
-    r.P2 = bP2;
-    r.P3 = bP3;
-    r.P4 = P4;
+    r.P0 = m;
+    r.P1 = bP2;
+    r.P2 = bP3;
+    r.P3 = P3;
 }
 
 
@@ -451,10 +451,10 @@ int CubicCurve::FindRayIntersections(const FloatPoint &linePointA,
 {
     const FloatPoint v = linePointB - linePointA;
 
-    const double ax = (P1.Y - linePointA.Y) * v.X - (P1.X - linePointA.X) * v.Y;
-    const double bx = (P2.Y - linePointA.Y) * v.X - (P2.X - linePointA.X) * v.Y;
-    const double cx = (P3.Y - linePointA.Y) * v.X - (P3.X - linePointA.X) * v.Y;
-    const double dx = (P4.Y - linePointA.Y) * v.X - (P4.X - linePointA.X) * v.Y;
+    const double ax = (P0.Y - linePointA.Y) * v.X - (P0.X - linePointA.X) * v.Y;
+    const double bx = (P1.Y - linePointA.Y) * v.X - (P1.X - linePointA.X) * v.Y;
+    const double cx = (P2.Y - linePointA.Y) * v.X - (P2.X - linePointA.X) * v.Y;
+    const double dx = (P3.Y - linePointA.Y) * v.X - (P3.X - linePointA.X) * v.Y;
 
     const double a = dx;
     const double b = cx * 3;

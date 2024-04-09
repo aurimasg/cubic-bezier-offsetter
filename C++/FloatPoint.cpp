@@ -3,9 +3,9 @@
 
 
 TrianglePointOrientation FloatPoint::DetermineTriangleOrientation(
-    const FloatPoint &p1, const FloatPoint &p2, const FloatPoint &p3)
+    const FloatPoint &p0, const FloatPoint &p1, const FloatPoint &p2)
 {
-    const double turn = Turn(p1, p2, p3);
+    const double turn = Turn(p0, p1, p2);
 
     if (FuzzyIsZero(turn)) {
         return TrianglePointOrientation::Collinear;

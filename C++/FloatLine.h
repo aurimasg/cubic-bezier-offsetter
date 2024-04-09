@@ -108,9 +108,9 @@ public:
     /**
      * Constructs a line segment between two given points.
      */
-    constexpr FloatLine(const FloatPoint &p1, const FloatPoint &p2)
-    :   P1(p1),
-        P2(p2)
+    constexpr FloatLine(const FloatPoint &p0, const FloatPoint &p1)
+    :   P0(p0),
+        P1(p1)
     {
     }
 
@@ -118,10 +118,10 @@ public:
     /**
      * Constructs a line segment between two given points.
      */
-    constexpr FloatLine(const double x1, const double y1, const double x2,
-        const double y2)
-    :   P1(x1, y1),
-        P2(x2, y2)
+    constexpr FloatLine(const double x0, const double y0, const double x1,
+        const double y1)
+    :   P0(x0, y0),
+        P1(x1, y1)
     {
     }
 
@@ -129,9 +129,9 @@ public:
     /**
      * Constructs a line segment between two given points.
      */
-    constexpr FloatLine(const double x1, const double y1, const FloatPoint &p2)
-    :   P1(x1, y1),
-        P2(p2)
+    constexpr FloatLine(const double x0, const double y0, const FloatPoint &p1)
+    :   P0(x0, y0),
+        P1(p1)
     {
     }
 
@@ -139,9 +139,9 @@ public:
     /**
      * Constructs a line segment between two given points.
      */
-    constexpr FloatLine(const FloatPoint &p1, const double x2, const double y2)
-    :   P1(p1),
-        P2(x2, y2)
+    constexpr FloatLine(const FloatPoint &p0, const double x1, const double y1)
+    :   P0(p0),
+        P1(x1, y1)
     {
     }
 
@@ -150,25 +150,25 @@ public:
     /**
      * Return X coordinate of the first point.
      */
-    double X1() const;
+    double X0() const;
 
 
     /**
      * Return Y coordinate of the first point.
      */
-    double Y1() const;
+    double Y0() const;
 
 
     /**
      * Return X coordinate of the second point.
      */
-    double X2() const;
+    double X1() const;
 
 
     /**
      * Return Y coordinate of the second point.
      */
-    double Y2() const;
+    double Y1() const;
 
 
     /**
@@ -328,9 +328,19 @@ public:
         const double epsilon = DBL_EPSILON) const;
 
 public:
+    FloatPoint P0;
     FloatPoint P1;
-    FloatPoint P2;
 };
+
+
+FORCE_INLINE double FloatLine::X0() const {
+    return P0.X;
+}
+
+
+FORCE_INLINE double FloatLine::Y0() const {
+    return P0.Y;
+}
 
 
 FORCE_INLINE double FloatLine::X1() const {
@@ -343,33 +353,23 @@ FORCE_INLINE double FloatLine::Y1() const {
 }
 
 
-FORCE_INLINE double FloatLine::X2() const {
-    return P2.X;
-}
-
-
-FORCE_INLINE double FloatLine::Y2() const {
-    return P2.Y;
-}
-
-
 FORCE_INLINE double FloatLine::Dx() const {
-    return P2.X - P1.X;
+    return P1.X - P0.X;
 }
 
 
 FORCE_INLINE double FloatLine::Dy() const {
-    return P2.Y - P1.Y;
+    return P1.Y - P0.Y;
 }
 
 
 FORCE_INLINE FloatLine FloatLine::Reversed() const {
-    return FloatLine(P2, P1);
+    return FloatLine(P1, P0);
 }
 
 
 FORCE_INLINE FloatPoint FloatLine::UnitVector() const {
-    return (P2 - P1).UnitVector();
+    return (P1 - P0).UnitVector();
 }
 
 
@@ -384,10 +384,10 @@ FORCE_INLINE FloatPoint FloatLine::UnitNormalVector() const {
 
 
 FORCE_INLINE FloatLine FloatLine::Translated(const FloatPoint &p) const {
-    return FloatLine(P1 + p, P2 + p);
+    return FloatLine(P0 + p, P1 + p);
 }
 
 
 FORCE_INLINE FloatPoint FloatLine::MidPoint() const {
-    return FloatPoint((P1.X + P2.X) * 0.5, (P1.Y + P2.Y) * 0.5);
+    return FloatPoint((P0.X + P1.X) * 0.5, (P0.Y + P1.Y) * 0.5);
 }

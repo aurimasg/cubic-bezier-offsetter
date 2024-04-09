@@ -69,15 +69,15 @@ public:
      * less than zero if points are counter-clockwise. And returns zero if
      * points are collinear.
      */
-    static double Turn(const FloatPoint &p1, const FloatPoint &p2,
-        const FloatPoint &p3);
+    static double Turn(const FloatPoint &p0, const FloatPoint &p1,
+        const FloatPoint &p2);
 
 
     /**
      * Determines orientation of triangle defined by three given points.
      */
     static TrianglePointOrientation DetermineTriangleOrientation(
-        const FloatPoint &p1, const FloatPoint &p2, const FloatPoint &p3);
+        const FloatPoint &p0, const FloatPoint &p1, const FloatPoint &p2);
 
 
     /**
@@ -85,8 +85,8 @@ public:
      * Returns false if triangle is counter-clockwise or if points are
      * collinear.
      */
-    static bool IsTriangleClockwise(const FloatPoint &p1,
-        const FloatPoint &p2, const FloatPoint &p3);
+    static bool IsTriangleClockwise(const FloatPoint &p0,
+        const FloatPoint &p1, const FloatPoint &p2);
 
 public:
 
@@ -183,13 +183,13 @@ public:
 };
 
 
-FORCE_INLINE FloatPoint operator+(const FloatPoint &p1, const FloatPoint &p2) {
-    return FloatPoint(p1.X + p2.X, p1.Y + p2.Y);
+FORCE_INLINE FloatPoint operator+(const FloatPoint &p0, const FloatPoint &p1) {
+    return FloatPoint(p0.X + p1.X, p0.Y + p1.Y);
 }
 
 
-FORCE_INLINE FloatPoint operator-(const FloatPoint &p1, const FloatPoint &p2) {
-    return FloatPoint(p1.X - p2.X, p1.Y - p2.Y);
+FORCE_INLINE FloatPoint operator-(const FloatPoint &p0, const FloatPoint &p1) {
+    return FloatPoint(p0.X - p1.X, p0.Y - p1.Y);
 }
 
 
@@ -203,8 +203,8 @@ FORCE_INLINE FloatPoint operator*(const double s, const FloatPoint &p) {
 }
 
 
-FORCE_INLINE FloatPoint operator*(const FloatPoint &p1, const FloatPoint &p2) {
-    return FloatPoint(p1.X * p2.X, p1.Y * p2.Y);
+FORCE_INLINE FloatPoint operator*(const FloatPoint &p0, const FloatPoint &p1) {
+    return FloatPoint(p0.X * p1.X, p0.Y * p1.Y);
 }
 
 
@@ -213,8 +213,8 @@ FORCE_INLINE FloatPoint operator/(const FloatPoint &p, const double s) {
 }
 
 
-FORCE_INLINE FloatPoint operator/(const FloatPoint &p1, const FloatPoint &p2) {
-    return FloatPoint(p1.X / p2.X, p1.Y / p2.Y);
+FORCE_INLINE FloatPoint operator/(const FloatPoint &p0, const FloatPoint &p1) {
+    return FloatPoint(p0.X / p1.X, p0.Y / p1.Y);
 }
 
 
@@ -230,8 +230,8 @@ FORCE_INLINE double FloatPoint::Turn(const FloatPoint &point1,
 }
 
 
-FORCE_INLINE bool FloatPoint::IsTriangleClockwise(const FloatPoint &p1, const FloatPoint &p2, const FloatPoint &p3) {
-    return DetermineTriangleOrientation(p1, p2, p3) == TrianglePointOrientation::Clockwise;
+FORCE_INLINE bool FloatPoint::IsTriangleClockwise(const FloatPoint &p0, const FloatPoint &p1, const FloatPoint &p2) {
+    return DetermineTriangleOrientation(p0, p1, p2) == TrianglePointOrientation::Clockwise;
 }
 
 

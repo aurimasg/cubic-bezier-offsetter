@@ -373,25 +373,25 @@ function findCubicRoots(coe0: number, coe1: number, coe2: number, coe3: number):
 /**
  * Value returned when trying to decide orientation of 3 points.
  */
-enum TrianglePointOrientation {
-
-    /**
-     * Points are in clockwise orientation.
-     */
-    Clockwise,
+type TrianglePointOrientation = number;
 
 
-    /**
-     * Points are in counter-clockwise orientation.
-     */
-    CounterClockwise,
+/**
+ * Points are in clockwise orientation.
+ */
+const TrianglePointOrientationClockwise = 0;
 
 
-    /**
-     * Points are collinear and orientation cannot be determined.
-     */
-    Collinear
-}
+/**
+ * Points are in counter-clockwise orientation.
+ */
+const TrianglePointOrientationCounterClockwise = 1;
+
+
+/**
+ * Points are collinear and orientation cannot be determined.
+ */
+const TrianglePointOrientationCollinear = 2;
 
 
 /**
@@ -431,12 +431,12 @@ class FloatPoint {
         const t = FloatPoint.turn(p0, p1, p2);
 
         if (fuzzyIsZero(t)) {
-            return TrianglePointOrientation.Collinear;
+            return TrianglePointOrientationCollinear;
         } else if (t > 0.0) {
-            return TrianglePointOrientation.Clockwise;
+            return TrianglePointOrientationClockwise;
         }
 
-        return TrianglePointOrientation.CounterClockwise;
+        return TrianglePointOrientationCounterClockwise;
     }
 
 
@@ -446,7 +446,7 @@ class FloatPoint {
      * collinear.
      */
     static isTriangleClockwise(p0: FloatPoint, p1: FloatPoint, p2: FloatPoint): boolean {
-        return FloatPoint.determineTriangleOrientation(p0, p1, p2) === TrianglePointOrientation.Clockwise;
+        return FloatPoint.determineTriangleOrientation(p0, p1, p2) === TrianglePointOrientationClockwise;
     }
 
 
@@ -648,33 +648,33 @@ class FloatPoint {
 /**
  * Describes type of intersection between two line segments.
  */
-enum LineIntersectionKind {
-
-    /**
-     * No intersections found. Line segments are either zero length or they
-     * are collinear.
-     */
-    None,
+type LineIntersectionKind = number;
 
 
-    /**
-     * Intersection was found within line segments.
-     */
-    Bounded,
+/**
+ * No intersections found. Line segments are either zero length or they
+ * are collinear.
+ */
+const LineIntersectionKindNone = 0;
 
 
-    /**
-     * Intersection was found, but beyong line segments.
-     */
-    Unbounded
-}
+/**
+ * Intersection was found within line segments.
+ */
+const LineIntersectionKindBounded = 1;
+
+
+/**
+ * Intersection was found, but beyong line segments.
+ */
+const LineIntersectionKindUnbounded = 2;
 
 
 /**
  * Describes intersection between two line segments.
  */
 class LineIntersection {
-    static noIntersection: LineIntersection = new LineIntersection(LineIntersectionKind.None, FloatPoint.zero);
+    static noIntersection: LineIntersection = new LineIntersection(LineIntersectionKindNone, FloatPoint.zero);
 
     constructor(kind: LineIntersectionKind, intersectionPoint: FloatPoint) {
         this.Kind = kind;
@@ -685,7 +685,7 @@ class LineIntersection {
     /**
      * What kind of intersection was found.
      */
-    Kind: LineIntersectionKind = LineIntersectionKind.None;
+    Kind: LineIntersectionKind = LineIntersectionKindNone;
 
 
     /**
@@ -918,16 +918,16 @@ class FloatLine {
         const point = this.P0.plus(a.multiplyScalar(na));
 
         if (na < 0 || na > 1) {
-            return new LineIntersection(LineIntersectionKind.Unbounded, point);
+            return new LineIntersection(LineIntersectionKindUnbounded, point);
         }
 
         const nb = (a.X * c.Y - a.Y * c.X) * reciprocal;
 
         if (nb < 0 || nb > 1) {
-            return new LineIntersection(LineIntersectionKind.Unbounded, point);
+            return new LineIntersection(LineIntersectionKindUnbounded, point);
         }
 
-        return new LineIntersection(LineIntersectionKind.Bounded, point);
+        return new LineIntersection(LineIntersectionKindBounded, point);
     }
 
 
@@ -1730,12 +1730,12 @@ function arcTo(builder: OutputBuilder, center: FloatPoint, to: FloatPoint, clock
     const determinedOrientation =
         FloatPoint.determineTriangleOrientation(center, arcFrom, to);
 
-    if (determinedOrientation !== TrianglePointOrientation.Collinear) {
+    if (determinedOrientation !== TrianglePointOrientationCollinear) {
         // If our three points are not collinear, we check if they are
         // clockwise. If we see that their orientation is opposite of what we
         // are told to draw, we draw large arc.
         const determinedClockwise =
-            determinedOrientation === TrianglePointOrientation.Clockwise;
+            determinedOrientation === TrianglePointOrientationClockwise;
 
         if (determinedClockwise != clockwise) {
             sweepAngle = (Math.PI * 2.0) - sweepAngle;

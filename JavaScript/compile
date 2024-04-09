@@ -1,3 +1,4 @@
 
 ./node_modules/.bin/babel offsetting-src.js -o offsetting.js
+./node_modules/.bin/prettier --write offsetting.js
 

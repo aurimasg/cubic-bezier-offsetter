@@ -67,10 +67,10 @@ const ArcCenterComparisonEpsilon = 1e-8;
  * When testing if curve is almost straight, cross products of unit vectors
  * are calculated as follows
  *
- *     Turn1 = (P1 → P2) ⨯ (P1 → P4)
- *     Turn2 = (P2 → P3) ⨯ (P1 → P4)
+ *     Turn1 = (P0 → P1) ⨯ (P0 → P3)
+ *     Turn2 = (P1 → P2) ⨯ (P0 → P3)
  *
- * Where P1, P2, P3 and P4 are curve points and (X → Y) are unit vectors going
+ * Where P0, P1, P2 and P3 are curve points and (X → Y) are unit vectors going
  * from X to a direction of Y.
  *
  * Then these values are compared with zero. If they both are close to zero,
@@ -703,16 +703,16 @@ class LineIntersection {
 class FloatLine {
     static zero: FloatLine = new FloatLine(FloatPoint.zero, FloatPoint.zero);
 
+    P0: FloatPoint = FloatPoint.zero;
     P1: FloatPoint = FloatPoint.zero;
-    P2: FloatPoint = FloatPoint.zero;
 
 
     /**
      * Constructs a line segment between two given points.
      */
     constructor(p1: FloatPoint, p2: FloatPoint) {
-        this.P1 = p1;
-        this.P2 = p2;
+        this.P0 = p1;
+        this.P1 = p2;
     }
 
 
@@ -720,7 +720,7 @@ class FloatLine {
      * Return X coordinate of the first point.
      */
     x1(): number {
-        return this.P1.X;
+        return this.P0.X;
     }
 
 
@@ -728,7 +728,7 @@ class FloatLine {
      * Return Y coordinate of the first point.
      */
     y1(): number {
-        return this.P1.Y;
+        return this.P0.Y;
     }
 
 
@@ -736,7 +736,7 @@ class FloatLine {
      * Return X coordinate of the second point.
      */
     x2(): number {
-        return this.P2.X;
+        return this.P1.X;
     }
 
 
@@ -744,7 +744,7 @@ class FloatLine {
      * Return Y coordinate of the second point.
      */
     y2(): number {
-        return this.P2.Y;
+        return this.P1.Y;
     }
 
 
@@ -753,7 +753,7 @@ class FloatLine {
      * line.
      */
     dx(): number {
-        return this.P2.X - this.P1.X;
+        return this.P1.X - this.P0.X;
     }
 
 
@@ -762,7 +762,7 @@ class FloatLine {
      * line.
      */
     dy(): number {
-        return this.P2.Y - this.P1.Y;
+        return this.P1.Y - this.P0.Y;
     }
 
 
@@ -771,8 +771,8 @@ class FloatLine {
      * given error.
      */
     isPoint(): boolean {
-        return (fuzzyIsEqual(this.P1.X, this.P2.X) &&
-            fuzzyIsEqual(this.P1.Y, this.P2.Y));
+        return (fuzzyIsEqual(this.P0.X, this.P1.X) &&
+            fuzzyIsEqual(this.P0.Y, this.P1.Y));
     }
 
 
@@ -781,8 +781,8 @@ class FloatLine {
      * given error.
      */
     isPointWithEpsilon(epsilon: number): boolean {
-        return (isEqualWithEpsilon(this.P1.X, this.P2.X, epsilon) &&
-            isEqualWithEpsilon(this.P1.Y, this.P2.Y, epsilon));
+        return (isEqualWithEpsilon(this.P0.X, this.P1.X, epsilon) &&
+            isEqualWithEpsilon(this.P0.Y, this.P1.Y, epsilon));
     }
 
 
@@ -822,8 +822,8 @@ class FloatLine {
      * counter-clock-wise from x axis.
      */
     angle(): number {
-        const dx = this.P2.X - this.P1.X;
-        const dy = this.P2.Y - this.P1.Y;
+        const dx = this.P1.X - this.P0.X;
+        const dy = this.P1.Y - this.P0.Y;
         const theta = rad2Deg(Math.atan2(-dy, dx));
         const thetaNormalized = theta < 0 ? theta + 360 : theta;
 
@@ -844,8 +844,8 @@ class FloatLine {
      * Returns length of this line.
      */
     length(): number {
-        const x = this.P2.X - this.P1.X;
-        const y = this.P2.Y - this.P1.Y;
+        const x = this.P1.X - this.P0.X;
+        const y = this.P1.Y - this.P0.Y;
 
         return Math.sqrt(x * x + y * y);
     }
@@ -855,8 +855,8 @@ class FloatLine {
      * Returns squared length of this line.
      */
     lengthSquared(): number {
-        const x = this.P2.X - this.P1.X;
-        const y = this.P2.Y - this.P1.Y;
+        const x = this.P1.X - this.P0.X;
+        const y = this.P1.Y - this.P0.Y;
 
         return x * x + y * y;
     }
@@ -866,7 +866,7 @@ class FloatLine {
      * Returns FloatLine with points reversed.
      */
     reversed(): FloatLine {
-        return new FloatLine(this.P2, this.P1);
+        return new FloatLine(this.P1, this.P0);
     }
 
 
@@ -875,7 +875,7 @@ class FloatLine {
      * line segment.
      */
     unitVector(): FloatPoint {
-        return this.P2.minus(this.P1).unitVector();
+        return this.P1.minus(this.P0).unitVector();
     }
 
 
@@ -903,19 +903,19 @@ class FloatLine {
      * Returns line intersection between this and other line segment.
      */
     intersect(l: FloatLine): LineIntersection {
-        const a = this.P2.minus(this.P1);
-        const b = l.P1.minus(l.P2);
+        const a = this.P1.minus(this.P0);
+        const b = l.P0.minus(l.P1);
         const denominator = a.Y * b.X - a.X * b.Y;
 
         if (denominator == 0) {
             return LineIntersection.noIntersection;
         }
 
-        const c = this.P1.minus(l.P1);
+        const c = this.P0.minus(l.P0);
         const reciprocal = 1.0 / denominator;
         const na = (b.Y * c.X - b.X * c.Y) * reciprocal;
 
-        const point = this.P1.plus(a.multiplyScalar(na));
+        const point = this.P0.plus(a.multiplyScalar(na));
 
         if (na < 0 || na > 1) {
             return new LineIntersection(LineIntersectionKind.Unbounded, point);
@@ -937,19 +937,19 @@ class FloatLine {
      * within line segment or not.
      */
     intersectSimple(l: FloatLine): ?FloatPoint {
-        const a = this.P2.minus(this.P1);
-        const b = l.P1.minus(l.P2);
+        const a = this.P1.minus(this.P0);
+        const b = l.P0.minus(l.P1);
         const denominator = a.Y * b.X - a.X * b.Y;
 
         if (denominator == 0) {
             return null;
         }
 
-        const c = this.P1.minus(l.P1);
+        const c = this.P0.minus(l.P0);
         const reciprocal = 1.0 / denominator;
         const na = (b.Y * c.X - b.X * c.Y) * reciprocal;
 
-        return this.P1.plus(a.multiplyScalar(na));
+        return this.P0.plus(a.multiplyScalar(na));
     }
 
 
@@ -958,7 +958,7 @@ class FloatLine {
      * amount.
      */
     translated(p: FloatPoint): FloatLine {
-        return new FloatLine(this.P1.plus(p), this.P2.plus(p));
+        return new FloatLine(this.P0.plus(p), this.P1.plus(p));
     }
 
 
@@ -966,7 +966,7 @@ class FloatLine {
      * Returns point which is in the middle of this line segment.
      */
     midPoint(): FloatPoint {
-        return new FloatPoint((this.P1.X + this.P2.X) * 0.5, (this.P1.Y + this.P2.Y) * 0.5);
+        return new FloatPoint((this.P0.X + this.P1.X) * 0.5, (this.P0.Y + this.P1.Y) * 0.5);
     }
 
 
@@ -986,8 +986,8 @@ class FloatLine {
 
         const v = this.unitVector();
 
-        this.P2 = new FloatPoint(this.P2.X + (v.X * length),
-            this.P2.Y + (v.Y * length));
+        this.P1 = new FloatPoint(this.P1.X + (v.X * length),
+            this.P1.Y + (v.Y * length));
     }
 
 
@@ -1008,8 +1008,8 @@ class FloatLine {
 
         const v = this.unitVector();
 
-        this.P1 = new FloatPoint(this.P1.X - (v.X * length),
-            this.P1.Y - (v.Y * length));
+        this.P0 = new FloatPoint(this.P0.X - (v.X * length),
+            this.P0.Y - (v.Y * length));
     }
 
 
@@ -1021,22 +1021,22 @@ class FloatLine {
      * @param epsilon Tolerance for number comparison.
      */
     isPointOnLineSegmentWithEpsilon(point: FloatPoint, epsilon: number): boolean {
-        const cross = (point.Y - this.P1.Y) * (this.P2.X - this.P1.X) -
-            (point.X - this.P1.X) * (this.P2.Y - this.P1.Y);
+        const cross = (point.Y - this.P0.Y) * (this.P1.X - this.P0.X) -
+            (point.X - this.P0.X) * (this.P1.Y - this.P0.Y);
 
         if (Math.abs(cross) > epsilon) {
             return false;
         }
 
-        const dot = (point.X - this.P1.X) * (this.P2.X - this.P1.X) +
-            (point.Y - this.P1.Y) * (this.P2.Y - this.P1.Y);
+        const dot = (point.X - this.P0.X) * (this.P1.X - this.P0.X) +
+            (point.Y - this.P0.Y) * (this.P1.Y - this.P0.Y);
 
         if (dot < 0) {
             return false;
         }
 
-        const sql = (this.P2.X - this.P1.X) * (this.P2.X - this.P1.X) +
-            (this.P2.Y - this.P1.Y) * (this.P2.Y - this.P1.Y);
+        const sql = (this.P1.X - this.P0.X) * (this.P1.X - this.P0.X) +
+            (this.P1.Y - this.P0.Y) * (this.P1.Y - this.P0.Y);
 
         return dot <= sql;
     }
@@ -1060,8 +1060,8 @@ class FloatLine {
      * @param epsilon Tolerance for number comparison.
      */
     isPointOnLineWithEpsilon(point: FloatPoint, epsilon: number): boolean {
-        const cross = (point.Y - this.P1.Y) * (this.P2.X - this.P1.X) -
-            (point.X - this.P1.X) * (this.P2.Y - this.P1.Y);
+        const cross = (point.Y - this.P0.Y) * (this.P1.X - this.P0.X) -
+            (point.X - this.P0.X) * (this.P1.Y - this.P0.Y);
 
         return Math.abs(cross) <= epsilon;
     }
@@ -1087,25 +1087,25 @@ class CubicCurve {
     /**
      * Start point of the curve.
      */
-    P1: FloatPoint = FloatPoint.zero;
+    P0: FloatPoint = FloatPoint.zero;
 
 
     /**
      * First control point of the curve.
      */
-    P2: FloatPoint = FloatPoint.zero;
+    P1: FloatPoint = FloatPoint.zero;
 
 
     /**
      * Second control point of the curve.
      */
-    P3: FloatPoint = FloatPoint.zero;
+    P2: FloatPoint = FloatPoint.zero;
 
 
     /**
      * End point.
      */
-    P4: FloatPoint = FloatPoint.zero;
+    P3: FloatPoint = FloatPoint.zero;
 
 
     /**
@@ -1120,10 +1120,10 @@ class CubicCurve {
      * @param p4 End point of curve.
      */
     constructor(p1: FloatPoint, p2: FloatPoint, p3: FloatPoint, p4: FloatPoint) {
-        this.P1 = p1;
-        this.P2 = p2;
-        this.P3 = p3;
-        this.P4 = p4;
+        this.P0 = p1;
+        this.P1 = p2;
+        this.P2 = p3;
+        this.P3 = p4;
     }
 
 
@@ -1161,9 +1161,9 @@ class CubicCurve {
      * be greater than 0.0. Larger value means less accurate test.
      */
     isPointWithEpsilon(epsilon: number): boolean {
-        return this.P1.equalsWithEpsilon(this.P4, epsilon) &&
-            this.P1.equalsWithEpsilon(this.P2, epsilon) &&
-            this.P1.equalsWithEpsilon(this.P3, epsilon);
+        return this.P0.equalsWithEpsilon(this.P3, epsilon) &&
+            this.P0.equalsWithEpsilon(this.P1, epsilon) &&
+            this.P0.equalsWithEpsilon(this.P2, epsilon);
     }
 
 
@@ -1182,51 +1182,51 @@ class CubicCurve {
      * last point of the curve.
      */
     isStraight(): boolean {
-        const minx = Math.min(this.P1.X, this.P4.X);
-        const miny = Math.min(this.P1.Y, this.P4.Y);
-        const maxx = Math.max(this.P1.X, this.P4.X);
-        const maxy = Math.max(this.P1.Y, this.P4.Y);
+        const minx = Math.min(this.P0.X, this.P3.X);
+        const miny = Math.min(this.P0.Y, this.P3.Y);
+        const maxx = Math.max(this.P0.X, this.P3.X);
+        const maxy = Math.max(this.P0.Y, this.P3.Y);
 
-        // Is P2 located between P1 and P4?
-        return minx <= this.P2.X &&
+        // Is P1 located between P0 and P3?
+        return minx <= this.P1.X &&
+            miny <= this.P1.Y &&
+            maxx >= this.P1.X &&
+            maxy >= this.P1.Y &&
+            // Is P2 located between P0 and P3?
+            minx <= this.P2.X &&
             miny <= this.P2.Y &&
             maxx >= this.P2.X &&
             maxy >= this.P2.Y &&
-            // Is P3 located between P1 and P4?
-            minx <= this.P3.X &&
-            miny <= this.P3.Y &&
-            maxx >= this.P3.X &&
-            maxy >= this.P3.Y &&
             // Are all points collinear?
-            fuzzyIsZero(FloatPoint.turn(this.P1, this.P2, this.P4)) &&
-            fuzzyIsZero(FloatPoint.turn(this.P1, this.P3, this.P4));
+            fuzzyIsZero(FloatPoint.turn(this.P0, this.P1, this.P3)) &&
+            fuzzyIsZero(FloatPoint.turn(this.P0, this.P2, this.P3));
     }
 
 
     /**
      * Returns start tangent of this curve. Start tangent is a line going from
-     * P1 to P2, P3 or P4, depending which one is the first found to be not
-     * equal to P1.
+     * P0 to P1, P2 or P3, depending which one is the first found to be not
+     * equal to P0.
      *
      * @param epsilon Point comparison tolerance.
      */
     startTangentWithEpsilon(epsilon: number): FloatLine {
-        if (this.P1.equalsWithEpsilon(this.P2, epsilon)) {
-            if (this.P1.equalsWithEpsilon(this.P3, epsilon)) {
-                return new FloatLine(this.P1, this.P4);
+        if (this.P0.equalsWithEpsilon(this.P1, epsilon)) {
+            if (this.P0.equalsWithEpsilon(this.P2, epsilon)) {
+                return new FloatLine(this.P0, this.P3);
             }
 
-            return new FloatLine(this.P1, this.P3);
+            return new FloatLine(this.P0, this.P2);
         }
 
-        return new FloatLine(this.P1, this.P2);
+        return new FloatLine(this.P0, this.P1);
     }
 
 
     /**
      * Returns start tangent of this curve. Start tangent is a line going from
-     * P1 to P2, P3 or P4, depending which one is the first found to be not
-     * equal to P1.
+     * P0 to P1, P2 or P3, depending which one is the first found to be not
+     * equal to P0.
      */
     startTangent(): FloatLine {
         return this.startTangentWithEpsilon(Number.EPSILON);
@@ -1235,28 +1235,28 @@ class CubicCurve {
 
     /**
      * Returns end tangent of this curve. Start tangent is a line going from
-     * P4 to P3, P2 or P1, depending which one is the first found to be not
-     * equal to P4.
+     * P3 to P2, P1 or P0, depending which one is the first found to be not
+     * equal to P3.
      *
      * @param epsilon Point comparison tolerance.
      */
     endTangentWithEpsilon(epsilon: number): FloatLine {
-        if (this.P4.equalsWithEpsilon(this.P3, epsilon)) {
-            if (this.P4.equalsWithEpsilon(this.P2, epsilon)) {
-                return new FloatLine(this.P4, this.P1);
+        if (this.P3.equalsWithEpsilon(this.P2, epsilon)) {
+            if (this.P3.equalsWithEpsilon(this.P1, epsilon)) {
+                return new FloatLine(this.P3, this.P0);
             }
 
-            return new FloatLine(this.P4, this.P2);
+            return new FloatLine(this.P3, this.P1);
         }
 
-        return new FloatLine(this.P4, this.P3);
+        return new FloatLine(this.P3, this.P2);
     }
 
 
     /**
      * Returns end tangent of this curve. Start tangent is a line going from
-     * P4 to P3, P2 or P1, depending which one is the first found to be not
-     * equal to P4.
+     * P3 to P2, P1 or P0, depending which one is the first found to be not
+     * equal to P3.
      */
     endTangent(): FloatLine {
         return this.endTangentWithEpsilon(Number.EPSILON);
@@ -1271,9 +1271,9 @@ class CubicCurve {
     pointAt(t: number): FloatPoint {
         const it = 1.0 - t;
 
-        const a0 = this.P1.multiplyScalar(it).plus(this.P2.multiplyScalar(t));
-        const b0 = this.P2.multiplyScalar(it).plus(this.P3.multiplyScalar(t));
-        const c0 = this.P3.multiplyScalar(it).plus(this.P4.multiplyScalar(t));
+        const a0 = this.P0.multiplyScalar(it).plus(this.P1.multiplyScalar(t));
+        const b0 = this.P1.multiplyScalar(it).plus(this.P2.multiplyScalar(t));
+        const c0 = this.P2.multiplyScalar(it).plus(this.P3.multiplyScalar(t));
 
         const a1 = a0.multiplyScalar(it).plus(b0.multiplyScalar(t));
         const b1 = b0.multiplyScalar(it).plus(c0.multiplyScalar(t));
@@ -1290,19 +1290,19 @@ class CubicCurve {
      */
     normalVector(t: number): FloatPoint {
         if (fuzzyIsZero(t)) {
-            if (this.P1.equals(this.P2)) {
-                if (this.P1.equals(this.P3)) {
-                    return new FloatLine(this.P1, this.P4).normalVector();
+            if (this.P0.equals(this.P1)) {
+                if (this.P0.equals(this.P2)) {
+                    return new FloatLine(this.P0, this.P3).normalVector();
                 } else {
-                    return new FloatLine(this.P1, this.P3).normalVector();
+                    return new FloatLine(this.P0, this.P2).normalVector();
                 }
             }
         } else if (fuzzyIsEqual(t, 1.0)) {
-            if (this.P3.equals(this.P4)) {
-                if (this.P2.equals(this.P4)) {
-                    return new FloatLine(this.P1, this.P4).normalVector();
+            if (this.P2.equals(this.P3)) {
+                if (this.P1.equals(this.P3)) {
+                    return new FloatLine(this.P0, this.P3).normalVector();
                 } else {
-                    return new FloatLine(this.P2, this.P4).normalVector();
+                    return new FloatLine(this.P1, this.P3).normalVector();
                 }
             }
         }
@@ -1336,8 +1336,8 @@ class CubicCurve {
         const b = 1.0 - 4.0 * t + 3.0 * d;
         const c = 2.0 * t - 3.0 * d;
 
-        return new FloatPoint(a * this.P1.X + b * this.P2.X + c * this.P3.X + d * this.P4.X,
-            a * this.P1.Y + b * this.P2.Y + c * this.P3.Y + d * this.P4.Y).multiplyScalar(3.0);
+        return new FloatPoint(a * this.P0.X + b * this.P1.X + c * this.P2.X + d * this.P3.X,
+            a * this.P0.Y + b * this.P1.Y + c * this.P2.Y + d * this.P3.Y).multiplyScalar(3.0);
     }
 
 
@@ -1350,8 +1350,8 @@ class CubicCurve {
         const c = 2.0 - 6.0 * t;
         const d = 2.0 * t;
 
-        return new FloatPoint(a * this.P1.X + b * this.P2.X + c * this.P3.X + d * this.P4.X,
-            a * this.P1.Y + b * this.P2.Y + c * this.P3.Y + d * this.P4.Y).multiplyScalar(3.0);
+        return new FloatPoint(a * this.P0.X + b * this.P1.X + c * this.P2.X + d * this.P3.X,
+            a * this.P0.Y + b * this.P1.Y + c * this.P2.Y + d * this.P3.Y).multiplyScalar(3.0);
     }
 
 
@@ -1381,39 +1381,39 @@ class CubicCurve {
             }
 
             // Cut at t1 only.
-            const ab = this.P1.lerp(this.P2, t1);
-            const bc = this.P2.lerp(this.P3, t1);
-            const cd = this.P3.lerp(this.P4, t1);
+            const ab = this.P0.lerp(this.P1, t1);
+            const bc = this.P1.lerp(this.P2, t1);
+            const cd = this.P2.lerp(this.P3, t1);
             const abc = ab.lerp(bc, t1);
             const bcd = bc.lerp(cd, t1);
             const abcd = abc.lerp(bcd, t1);
 
-            return new CubicCurve(this.P1, ab, abc, abcd);
+            return new CubicCurve(this.P0, ab, abc, abcd);
         }
 
         if (t1 >= (1.0 - Number.EPSILON)) {
             // Cut at t0 only.
-            const ab = this.P1.lerp(this.P2, t0);
-            const bc = this.P2.lerp(this.P3, t0);
-            const cd = this.P3.lerp(this.P4, t0);
+            const ab = this.P0.lerp(this.P1, t0);
+            const bc = this.P1.lerp(this.P2, t0);
+            const cd = this.P2.lerp(this.P3, t0);
             const abc = ab.lerp(bc, t0);
             const bcd = bc.lerp(cd, t0);
             const abcd = abc.lerp(bcd, t0);
 
-            return new CubicCurve(abcd, bcd, cd, this.P4);
+            return new CubicCurve(abcd, bcd, cd, this.P3);
         }
 
         // Cut at both t0 and t1.
-        const ab0 = this.P1.lerp(this.P2, t1);
-        const bc0 = this.P2.lerp(this.P3, t1);
-        const cd0 = this.P3.lerp(this.P4, t1);
+        const ab0 = this.P0.lerp(this.P1, t1);
+        const bc0 = this.P1.lerp(this.P2, t1);
+        const cd0 = this.P2.lerp(this.P3, t1);
         const abc0 = ab0.lerp(bc0, t1);
         const bcd0 = bc0.lerp(cd0, t1);
         const abcd0 = abc0.lerp(bcd0, t1);
 
         const m = t0 / t1;
 
-        const ab1 = this.P1.lerp(ab0, m);
+        const ab1 = this.P0.lerp(ab0, m);
         const bc1 = ab0.lerp(abc0, m);
         const cd1 = abc0.lerp(abcd0, m);
         const abc1 = ab1.lerp(bc1, m);
@@ -1429,18 +1429,18 @@ class CubicCurve {
      * found. Up to 3 points are returned.
      */
     findMaxCurvature(): Array<number> {
-        const axx = this.P2.X - this.P1.X;
-        const bxx = this.P3.X - 2.0 * this.P2.X + this.P1.X;
-        const cxx = this.P4.X + 3.0 * (this.P2.X - this.P3.X) - this.P1.X;
+        const axx = this.P1.X - this.P0.X;
+        const bxx = this.P2.X - 2.0 * this.P1.X + this.P0.X;
+        const cxx = this.P3.X + 3.0 * (this.P1.X - this.P2.X) - this.P0.X;
 
         const cox0 = cxx * cxx;
         const cox1 = 3.0 * bxx * cxx;
         const cox2 = 2.0 * bxx * bxx + cxx * axx;
         const cox3 = axx * bxx;
 
-        const ayy = this.P2.Y - this.P1.Y;
-        const byy = this.P3.Y - 2.0 * this.P2.Y + this.P1.Y;
-        const cyy = this.P4.Y + 3.0 * (this.P2.Y - this.P3.Y) - this.P1.Y;
+        const ayy = this.P1.Y - this.P0.Y;
+        const byy = this.P2.Y - 2.0 * this.P1.Y + this.P0.Y;
+        const cyy = this.P3.Y + 3.0 * (this.P1.Y - this.P2.Y) - this.P0.Y;
 
         const coy0 = cyy * cyy;
         const coy1 = 3.0 * byy * cyy;
@@ -1461,12 +1461,12 @@ class CubicCurve {
      * found.
      */
     findInflections(): Array<number> {
-        const ax = this.P2.X - this.P1.X;
-        const ay = this.P2.Y - this.P1.Y;
-        const bx = this.P3.X - 2.0 * this.P2.X + this.P1.X;
-        const by = this.P3.Y - 2.0 * this.P2.Y + this.P1.Y;
-        const cx = this.P4.X + 3.0 * (this.P2.X - this.P3.X) - this.P1.X;
-        const cy = this.P4.Y + 3.0 * (this.P2.Y - this.P3.Y) - this.P1.Y;
+        const ax = this.P1.X - this.P0.X;
+        const ay = this.P1.Y - this.P0.Y;
+        const bx = this.P2.X - 2.0 * this.P1.X + this.P0.X;
+        const by = this.P2.Y - 2.0 * this.P1.Y + this.P0.Y;
+        const cx = this.P3.X + 3.0 * (this.P1.X - this.P2.X) - this.P0.X;
+        const cy = this.P3.Y + 3.0 * (this.P1.Y - this.P2.Y) - this.P0.Y;
 
         return findQuadraticRoots(bx * cy - by * cx, ax * cy - ay * cx,
             ax * by - ay * bx);
@@ -1477,17 +1477,17 @@ class CubicCurve {
      * Split this curve in half and return array containing two curves.
      */
     split(): Array<CubicCurve> {
-        const c = this.P2.plus(this.P3).multiplyScalar(0.5);
+        const c = this.P1.plus(this.P2).multiplyScalar(0.5);
 
-        const aP2 = this.P1.plus(this.P2).multiplyScalar(0.5);
-        const bP3 = this.P3.plus(this.P4).multiplyScalar(0.5);
+        const aP2 = this.P0.plus(this.P1).multiplyScalar(0.5);
+        const bP3 = this.P2.plus(this.P3).multiplyScalar(0.5);
         const aP3 = aP2.plus(c).multiplyScalar(0.5);
         const bP2 = bP3.plus(c).multiplyScalar(0.5);
         const m = aP3.plus(bP2).multiplyScalar(0.5);
 
         return [
-            new CubicCurve(this.P1, aP2, aP3, m),
-            new CubicCurve(m, bP2, bP3, this.P4)
+            new CubicCurve(this.P0, aP2, aP3, m),
+            new CubicCurve(m, bP2, bP3, this.P3)
         ];
     }
 
@@ -1505,10 +1505,10 @@ class CubicCurve {
     findRayIntersections(linePointA: FloatPoint, linePointB: FloatPoint): Array<number> {
         const v = linePointB.minus(linePointA);
 
-        const ax = (this.P1.Y - linePointA.Y) * v.X - (this.P1.X - linePointA.X) * v.Y;
-        const bx = (this.P2.Y - linePointA.Y) * v.X - (this.P2.X - linePointA.X) * v.Y;
-        const cx = (this.P3.Y - linePointA.Y) * v.X - (this.P3.X - linePointA.X) * v.Y;
-        const dx = (this.P4.Y - linePointA.Y) * v.X - (this.P4.X - linePointA.X) * v.Y;
+        const ax = (this.P0.Y - linePointA.Y) * v.X - (this.P0.X - linePointA.X) * v.Y;
+        const bx = (this.P1.Y - linePointA.Y) * v.X - (this.P1.X - linePointA.X) * v.Y;
+        const cx = (this.P2.Y - linePointA.Y) * v.X - (this.P2.X - linePointA.X) * v.Y;
+        const dx = (this.P3.Y - linePointA.Y) * v.X - (this.P3.X - linePointA.X) * v.Y;
 
         const a = dx;
         const b = cx * 3;
@@ -1550,7 +1550,7 @@ class CubicCurveBuilder {
      * Returns the first point.
      */
     getFirstPoint(): FloatPoint {
-        return this.segments[0].P1;
+        return this.segments[0].P0;
     }
 
 
@@ -1558,7 +1558,7 @@ class CubicCurveBuilder {
      * Returns the last point.
      */
     getLastPoint(): FloatPoint {
-        return this.segments[this.segments.length - 1].P4;
+        return this.segments[this.segments.length - 1].P3;
     }
 
 
@@ -1757,11 +1757,11 @@ function arcTo(builder: OutputBuilder, center: FloatPoint, to: FloatPoint, clock
         const unitCurve = findUnitCubicCurveForArc(
             new FloatPoint(c, s), new FloatPoint(c1, s1));
 
-        const p2 = unitCurve.P2.multiplyScalar(arcRadius).plus(center);
-        const p3 = unitCurve.P3.multiplyScalar(arcRadius).plus(center);
+        const p2 = unitCurve.P1.multiplyScalar(arcRadius).plus(center);
+        const p3 = unitCurve.P2.multiplyScalar(arcRadius).plus(center);
 
         if (i < nSteps) {
-            const p4 = unitCurve.P4.multiplyScalar(arcRadius).plus(center);
+            const p4 = unitCurve.P3.multiplyScalar(arcRadius).plus(center);
 
             cubicTo(builder, p2, p3, p4);
         } else {
@@ -1804,13 +1804,13 @@ function acceptOffset(original: CubicCurve, parallel: CubicCurve, offset: number
     // Using shape control method, sometimes output curve becomes completely
     // off in some situations involving start and end tangents being almost
     // parallel. These two checks are to prevent accepting such curves as good.
-    if (FloatPoint.isTriangleClockwise(original.P1, original.P2, original.P4) !=
-        FloatPoint.isTriangleClockwise(parallel.P1, parallel.P2, parallel.P4)) {
+    if (FloatPoint.isTriangleClockwise(original.P0, original.P1, original.P3) !=
+        FloatPoint.isTriangleClockwise(parallel.P0, parallel.P1, parallel.P3)) {
         return false;
     }
 
-    if (FloatPoint.isTriangleClockwise(original.P1, original.P3, original.P4) !=
-        FloatPoint.isTriangleClockwise(parallel.P1, parallel.P3, parallel.P4)) {
+    if (FloatPoint.isTriangleClockwise(original.P0, original.P2, original.P3) !=
+        FloatPoint.isTriangleClockwise(parallel.P0, parallel.P2, parallel.P3)) {
         return false;
     }
 
@@ -1850,7 +1850,7 @@ function arcOffset(builder: OutputBuilder, offset: number, center: FloatPoint, f
         l2.extendByLengthFront(-offset);
     }
 
-    maybeAddCuspArc(builder, l1.P2);
+    maybeAddCuspArc(builder, l1.P1);
 
     // Determine if it is clockwise again since arc orientation may have
     // changed if arc radius was smaller than offset.
@@ -1859,8 +1859,8 @@ function arcOffset(builder: OutputBuilder, offset: number, center: FloatPoint, f
     // instead of the point we just calculated as the start of circular arc
     // because for small arcs a small numeric error can result in incorrect
     // arc orientation.
-    arcTo(builder, center, l2.P2, FloatPoint.isTriangleClockwise(center,
-        builder.previousPoint, l2.P2));
+    arcTo(builder, center, l2.P1, FloatPoint.isTriangleClockwise(center,
+        builder.previousPoint, l2.P1));
 }
 
 
@@ -1883,10 +1883,10 @@ class CurveTangentData {
     constructor(curve: CubicCurve) {
         this.startTangent = curve.startTangent();
         this.endTangent = curve.endTangent();
-        this.turn1 = unitTurn(this.startTangent.P1, this.startTangent.P2,
-            this.endTangent.P1);
-        this.turn2 = unitTurn(this.startTangent.P1, this.endTangent.P2,
-            this.endTangent.P1);
+        this.turn1 = unitTurn(this.startTangent.P0, this.startTangent.P1,
+            this.endTangent.P0);
+        this.turn2 = unitTurn(this.startTangent.P0, this.endTangent.P1,
+            this.endTangent.P0);
         this.startUnitNormal = this.startTangent.unitNormalVector();
         this.endUnitNormal = this.endTangent.unitNormalVector();
     }
@@ -1901,7 +1901,7 @@ function canTryArcOffset(d: CurveTangentData): boolean {
     // Arc approximation is only attempted if curve is not considered
     // approximately straight. But it can be attemped for curves which have
     // their control points on the different sides of line connecting points
-    // P1 and P4.
+    // P0 and P3.
     //
     // We need to make sure we don't try to do arc approximation for these S
     // type curves because such curves cannot be approximated by arcs in such
@@ -1922,7 +1922,7 @@ function canTrySimpleOffset(d: CurveTangentData): boolean {
     // Arc approximation is only attempted if curve is not considered
     // approximately straight. But it can be attemped for curves which have
     // their control points on the different sides of line connecting points
-    // P1 and P4.
+    // P0 and P3.
     //
     // We need to make sure we don't try to do arc approximation for these S
     // type curves because the shape control method behaves really badly with
@@ -1937,9 +1937,9 @@ function canTrySimpleOffset(d: CurveTangentData): boolean {
  */
 function curveIsTooTiny(curve: CubicCurve): boolean {
     const lengthsSquared =
+        curve.P0.distanceToSquared(curve.P1) +
         curve.P1.distanceToSquared(curve.P2) +
-        curve.P2.distanceToSquared(curve.P3) +
-        curve.P3.distanceToSquared(curve.P4);
+        curve.P2.distanceToSquared(curve.P3);
 
     return lengthsSquared <= MaximumTinyCurvePolygonPerimeterSquared;
 }
@@ -1954,8 +1954,8 @@ function trySimpleCurveOffset(curve: CubicCurve, d: CurveTangentData, builder: O
         return false;
     }
 
-    const d1 = curve.P2.minus(curve.P1);
-    const d2 = curve.P3.minus(curve.P4);
+    const d1 = curve.P1.minus(curve.P0);
+    const d2 = curve.P2.minus(curve.P3);
     const div = d1.cross(d2);
 
     if (fuzzyIsZero(div)) {
@@ -1963,10 +1963,10 @@ function trySimpleCurveOffset(curve: CubicCurve, d: CurveTangentData, builder: O
     }
 
     // Start point.
-    const p1 = d.startTangent.P1.plus(d.startTangent.unitNormalVector().multiplyScalar(offset));
+    const p1 = d.startTangent.P0.plus(d.startTangent.unitNormalVector().multiplyScalar(offset));
 
     // End point.
-    const p4 = d.endTangent.P1.minus(d.endTangent.unitNormalVector().multiplyScalar(offset));
+    const p4 = d.endTangent.P0.minus(d.endTangent.unitNormalVector().multiplyScalar(offset));
 
     // Middle point.
     const mp = curve.pointAt(0.5);
@@ -1992,9 +1992,9 @@ function trySimpleCurveOffset(curve: CubicCurve, d: CurveTangentData, builder: O
         return false;
     }
 
-    maybeAddCuspArc(builder, candidate.P1);
+    maybeAddCuspArc(builder, candidate.P0);
 
-    cubicTo(builder, candidate.P2, candidate.P3, candidate.P4);
+    cubicTo(builder, candidate.P1, candidate.P2, candidate.P3);
 
     return true;
 }
@@ -2053,8 +2053,8 @@ function mergeCurvePositions(array: Array<number>, na: Array<number>, epsilon: n
 function lineCircleIntersect(line: FloatLine, circleCenter: FloatPoint, circleRadius: number): boolean {
     //ASSERT(circleRadius >= 0);
 
-    const d = line.P2.minus(line.P1);
-    const g = line.P1.minus(circleCenter);
+    const d = line.P1.minus(line.P0);
+    const g = line.P0.minus(circleCenter);
     const a = d.dot(d);
     const b = 2.0 * g.dot(d);
     const crSquared = circleRadius * circleRadius;
@@ -2141,8 +2141,8 @@ function tryArcApproximation(curve: CubicCurve, d: CurveTangentData, builder: Ou
         return false;
     }
 
-    const asv = d.startTangent.P1;
-    const bsv = d.endTangent.P1;
+    const asv = d.startTangent.P0;
+    const bsv = d.endTangent.P0;
     const u = ((bsv.Y - asv.Y) * vectorTo.X - (bsv.X - asv.X) * vectorTo.Y) / denom;
     const v = ((bsv.Y - asv.Y) * vectorFrom.X - (bsv.X - asv.X) * vectorFrom.Y) / denom;
 
@@ -2155,21 +2155,21 @@ function tryArcApproximation(curve: CubicCurve, d: CurveTangentData, builder: Ou
 
     // If start or end tangents extend too far beyond intersection, return
     // early since it will not result in good approximation.
-    if (curve.P1.distanceToSquared(V) < (d.startTangent.lengthSquared() * 0.25) ||
-        curve.P4.distanceToSquared(V) < (d.endTangent.lengthSquared() * 0.25)) {
+    if (curve.P0.distanceToSquared(V) < (d.startTangent.lengthSquared() * 0.25) ||
+        curve.P3.distanceToSquared(V) < (d.endTangent.lengthSquared() * 0.25)) {
         return false;
     }
 
-    const P2VDistance = curve.P4.distanceTo(V);
-    const P1VDistance = curve.P1.distanceTo(V);
-    const P1P4Distance = curve.P1.distanceTo(curve.P4);
-    const G = curve.P1.multiplyScalar(P2VDistance).plus(curve.P4.multiplyScalar(P1VDistance).plus(V.multiplyScalar(P1P4Distance))).divideScalar(P2VDistance + P1VDistance + P1P4Distance);
+    const P2VDistance = curve.P3.distanceTo(V);
+    const P1VDistance = curve.P0.distanceTo(V);
+    const P1P4Distance = curve.P0.distanceTo(curve.P3);
+    const G = curve.P0.multiplyScalar(P2VDistance).plus(curve.P3.multiplyScalar(P1VDistance).plus(V.multiplyScalar(P1P4Distance))).divideScalar(P2VDistance + P1VDistance + P1P4Distance);
 
-    const P1G = new FloatLine(curve.P1, G);
-    const GP4 = new FloatLine(G, curve.P4);
+    const P1G = new FloatLine(curve.P0, G);
+    const GP4 = new FloatLine(G, curve.P3);
 
     const E = new FloatLine(P1G.midPoint(), P1G.midPoint().minus(P1G.normalVector()));
-    const E1 = new FloatLine(d.startTangent.P1, d.startTangent.P1.minus(d.startTangent.normalVector()));
+    const E1 = new FloatLine(d.startTangent.P0, d.startTangent.P0.minus(d.startTangent.normalVector()));
     const C1 = E.intersectSimple(E1);
 
     if (C1 == null) {
@@ -2190,7 +2190,7 @@ function tryArcApproximation(curve: CubicCurve, d: CurveTangentData, builder: Ou
     }
 
     const F = new FloatLine(GP4.midPoint(), GP4.midPoint().minus(GP4.normalVector()));
-    const F1 = new FloatLine(d.endTangent.P1, d.endTangent.P1.plus(d.endTangent.normalVector()));
+    const F1 = new FloatLine(d.endTangent.P0, d.endTangent.P0.plus(d.endTangent.normalVector()));
     const C2 = F.intersectSimple(F1);
 
     if (C2 == null) {
@@ -2198,34 +2198,34 @@ function tryArcApproximation(curve: CubicCurve, d: CurveTangentData, builder: Ou
     }
 
     if (C1.equalsWithEpsilon(C2, ArcCenterComparisonEpsilon)) {
-        const radius = C1.distanceTo(curve.P1);
+        const radius = C1.distanceTo(curve.P0);
 
         if (goodArc(C1, radius, curve, maximumError, 0, 1)) {
-            const clockwise = FloatPoint.isTriangleClockwise(curve.P1, V,
-                curve.P4);
+            const clockwise = FloatPoint.isTriangleClockwise(curve.P0, V,
+                curve.P3);
 
-            arcOffset(builder, offset, C1, curve.P1, curve.P4, clockwise);
+            arcOffset(builder, offset, C1, curve.P0, curve.P3, clockwise);
 
             return true;
         }
     } else {
-        const radius1 = C1.distanceTo(curve.P1);
+        const radius1 = C1.distanceTo(curve.P0);
 
         if (!goodArc(C1, radius1, curve, maximumError, 0, tG)) {
             return false;
         }
 
-        const radius2 = C2.distanceTo(curve.P4);
+        const radius2 = C2.distanceTo(curve.P3);
 
         if (!goodArc(C2, radius2, curve, maximumError, tG, 1)) {
             return false;
         }
 
-        const clockwise = FloatPoint.isTriangleClockwise(curve.P1, V,
-            curve.P4);
+        const clockwise = FloatPoint.isTriangleClockwise(curve.P0, V,
+            curve.P3);
 
-        arcOffset(builder, offset, C1, curve.P1, G, clockwise);
-        arcOffset(builder, offset, C2, G, curve.P4, clockwise);
+        arcOffset(builder, offset, C1, curve.P0, G, clockwise);
+        arcOffset(builder, offset, C2, G, curve.P3, clockwise);
 
         return true;
     }
@@ -2245,12 +2245,12 @@ function isCurveApproximatelyStraight(d: CurveTangentData): boolean {
     const x3 = d.endTangent.x2();
     const y3 = d.endTangent.y2();
 
-    // Is P2 located between P1 and P4?
+    // Is P1 located between P0 and P3?
     return minx <= x2 &&
         miny <= y2 &&
         maxx >= x2 &&
         maxy >= y2 &&
-        // Is P3 located between P1 and P4?
+        // Is P2 located between P0 and P3?
         minx <= x3 &&
         miny <= y3 &&
         maxx >= x3 &&
@@ -2277,17 +2277,17 @@ function approximateBezier(curve: CubicCurve, d: CurveTangentData, builder: Outp
         if (isCurveApproximatelyStraight(d)) {
             if (curveIsCompletelyStraight(d)) {
                 // Curve is extremely close to being straight.
-                const line = new FloatLine(curve.P1, curve.P2);
+                const line = new FloatLine(curve.P0, curve.P1);
                 const normal = line.unitNormalVector();
 
-                maybeAddCuspArc(builder, line.P1.plus(normal.multiplyScalar(offset)));
+                maybeAddCuspArc(builder, line.P0.plus(normal.multiplyScalar(offset)));
 
-                lineTo(builder, line.P2.plus(normal.multiplyScalar(offset)));
+                lineTo(builder, line.P1.plus(normal.multiplyScalar(offset)));
             } else {
-                const p1o = d.startTangent.P1.plus(d.startUnitNormal.multiplyScalar(offset));
-                const p2o = d.startTangent.P2.plus(d.startUnitNormal.multiplyScalar(offset));
-                const p3o = d.endTangent.P2.minus(d.endUnitNormal.multiplyScalar(offset));
-                const p4o = d.endTangent.P1.minus(d.endUnitNormal.multiplyScalar(offset));
+                const p1o = d.startTangent.P0.plus(d.startUnitNormal.multiplyScalar(offset));
+                const p2o = d.startTangent.P1.plus(d.startUnitNormal.multiplyScalar(offset));
+                const p3o = d.endTangent.P1.minus(d.endUnitNormal.multiplyScalar(offset));
+                const p4o = d.endTangent.P0.minus(d.endUnitNormal.multiplyScalar(offset));
 
                 maybeAddCuspArc(builder, p1o);
 
@@ -2370,7 +2370,7 @@ function offsetLinearCuspyCurve(curve: CubicCurve, builder: OutputBuilder, offse
     const startTangent = curve.startTangent();
     const normal = startTangent.unitNormalVector();
 
-    let previousPoint = startTangent.P1;
+    let previousPoint = startTangent.P0;
     let previousOffsetPoint = previousPoint.plus(normal.multiplyScalar(offset));
 
     moveTo(builder, previousOffsetPoint);
@@ -2408,7 +2408,7 @@ function offsetLinearCuspyCurve(curve: CubicCurve, builder: OutputBuilder, offse
     const endTangent = curve.endTangent();
     const normal2 = endTangent.unitNormalVector();
 
-    lineTo(builder, endTangent.P1.minus(normal2.multiplyScalar(offset)));
+    lineTo(builder, endTangent.P0.minus(normal2.multiplyScalar(offset)));
 }
 
 
@@ -2418,7 +2418,7 @@ function doApproximateBezier(curve: CubicCurve, d: CurveTangentData, builder: Ou
 
     // Handle special case where the input curve is a straight line, but
     // control points do not necessary lie on line segment between curve
-    // points P1 and P4.
+    // points P0 and P3.
     if (curveIsCompletelyStraight(d)) {
         offsetLinearCuspyCurve(curve, builder, offset,
             maximumCurvaturePositions);
@@ -2469,7 +2469,7 @@ function doApproximateBezier(curve: CubicCurve, d: CurveTangentData, builder: Ou
                 builder.cuspPoint = curve.pointAt(T);
                 builder.needsCuspArc = true;
                 builder.cuspArcClockwise = FloatPoint.isTriangleClockwise(
-                    k.P4, builder.cuspPoint, curve.pointAt(t2));
+                    k.P3, builder.cuspPoint, curve.pointAt(t2));
 
                 previousT = t2;
             } else {
@@ -2499,28 +2499,28 @@ function doApproximateBezier(curve: CubicCurve, d: CurveTangentData, builder: Ou
  * Flattens ends of curves if control points are too close to end points.
  */
 function fixRedundantTangents(curve: CubicCurve): CubicCurve {
-    let p2 = curve.P2;
-    let p3 = curve.P3;
+    let p2 = curve.P1;
+    let p3 = curve.P2;
 
-    if (curve.P1.distanceToSquared(p2) < 1e-12) {
-        p2 = curve.P1;
+    if (curve.P0.distanceToSquared(p2) < 1e-12) {
+        p2 = curve.P0;
     }
 
-    if (curve.P4.distanceToSquared(p3) < 1e-12) {
-        p3 = curve.P4;
+    if (curve.P3.distanceToSquared(p3) < 1e-12) {
+        p3 = curve.P3;
     }
 
-    return new CubicCurve(curve.P1, p2, p3, curve.P4);
+    return new CubicCurve(curve.P0, p2, p3, curve.P3);
 }
 
 
 function offsetCurve(curve: CubicCurve, offset: number, maximumError: number, builder: CubicCurveBuilder) {
     builder.reset();
 
-    const minx = min4(curve.P1.X, curve.P2.X, curve.P3.X, curve.P4.X);
-    const maxx = max4(curve.P1.X, curve.P2.X, curve.P3.X, curve.P4.X);
-    const miny = min4(curve.P1.Y, curve.P2.Y, curve.P3.Y, curve.P4.Y);
-    const maxy = max4(curve.P1.Y, curve.P2.Y, curve.P3.Y, curve.P4.Y);
+    const minx = min4(curve.P0.X, curve.P1.X, curve.P2.X, curve.P3.X);
+    const maxx = max4(curve.P0.X, curve.P1.X, curve.P2.X, curve.P3.X);
+    const miny = min4(curve.P0.Y, curve.P1.Y, curve.P2.Y, curve.P3.Y);
+    const maxy = max4(curve.P0.Y, curve.P1.Y, curve.P2.Y, curve.P3.Y);
 
     const dx = maxx - minx;
     const dy = maxy - miny;
@@ -2536,7 +2536,7 @@ function offsetCurve(curve: CubicCurve, offset: number, maximumError: number, bu
     const so = offset / m;
 
     if (fuzzyIsZero(so)) {
-        builder.addCubic(curve.P1, curve.P2, curve.P3, curve.P4);
+        builder.addCubic(curve.P0, curve.P1, curve.P2, curve.P3);
         return;
     }
 
@@ -2545,10 +2545,10 @@ function offsetCurve(curve: CubicCurve, offset: number, maximumError: number, bu
     const ty = (miny + maxy) / 2.0;
     const t = new FloatPoint(tx, ty);
 
-    const p1 = curve.P1.minus(t);
-    const p2 = curve.P2.minus(t);
-    const p3 = curve.P3.minus(t);
-    const p4 = curve.P4.minus(t);
+    const p1 = curve.P0.minus(t);
+    const p2 = curve.P1.minus(t);
+    const p3 = curve.P2.minus(t);
+    const p4 = curve.P3.minus(t);
 
     const sc = new CubicCurve(p1.divideScalar(m), p2.divideScalar(m),
         p3.divideScalar(m), p4.divideScalar(m));
@@ -2563,20 +2563,20 @@ function offsetCurve(curve: CubicCurve, offset: number, maximumError: number, bu
         if (curveIsCompletelyStraight(d)) {
             // Curve is extremely close to being straight, use simple line
             // translation.
-            const line = new FloatLine(c.P1, c.P4);
+            const line = new FloatLine(c.P0, c.P3);
             const normal = line.unitNormalVector();
             const translated = line.translated(normal.multiplyScalar(so));
 
-            moveTo(b, translated.P1);
+            moveTo(b, translated.P0);
 
-            lineTo(b, translated.P2);
+            lineTo(b, translated.P1);
         } else {
             // Curve is almost straight. Translate start and end tangents
             // separately and generate a cubic curve.
-            const p1o = d.startTangent.P1.plus(d.startUnitNormal.multiplyScalar(so));
-            const p2o = d.startTangent.P2.plus(d.startUnitNormal.multiplyScalar(so));
-            const p3o = d.endTangent.P2.minus(d.endUnitNormal.multiplyScalar(so));
-            const p4o = d.endTangent.P1.minus(d.endUnitNormal.multiplyScalar(so));
+            const p1o = d.startTangent.P0.plus(d.startUnitNormal.multiplyScalar(so));
+            const p2o = d.startTangent.P1.plus(d.startUnitNormal.multiplyScalar(so));
+            const p3o = d.endTangent.P1.minus(d.endUnitNormal.multiplyScalar(so));
+            const p4o = d.endTangent.P0.minus(d.endUnitNormal.multiplyScalar(so));
 
             moveTo(b, p1o);
 
@@ -2584,7 +2584,7 @@ function offsetCurve(curve: CubicCurve, offset: number, maximumError: number, bu
         }
     } else {
         // Arbitrary curve.
-        moveTo(b, d.startTangent.P1.plus(d.startUnitNormal.multiplyScalar(so)));
+        moveTo(b, d.startTangent.P0.plus(d.startUnitNormal.multiplyScalar(so)));
 
         // Try arc approximation first in case this curve was intended to
         // approximate circle. If that is indeed true, we avoid a lot of

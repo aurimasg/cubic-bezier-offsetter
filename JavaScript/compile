@@ -1,0 +1,3 @@
+
+./node_modules/.bin/babel offsetting-src.js -o offsetting.js
+

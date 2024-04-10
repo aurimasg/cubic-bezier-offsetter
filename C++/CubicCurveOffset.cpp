@@ -231,10 +231,10 @@ static CubicCurve FindUnitCubicCurveForArc(const FloatPoint &p0,
         (ax * by - ay * bx);
     const double x1 = p0.X - k2 * p0.Y;
     const double y1 = p0.Y + k2 * p0.X;
-    const double x3 = p3.X + k2 * p3.Y;
-    const double y3 = p3.Y - k2 * p3.X;
+    const double x2 = p3.X + k2 * p3.Y;
+    const double y2 = p3.Y - k2 * p3.X;
 
-    return CubicCurve(p0, FloatPoint(x1, y1), FloatPoint(x3, y3), p3);
+    return CubicCurve(p0, FloatPoint(x1, y1), FloatPoint(x2, y2), p3);
 }
 
 
@@ -733,15 +733,15 @@ static bool TryArcApproximation(const CubicCurve &curve,
         return false;
     }
 
-    const double P2VDistance = curve.P3.DistanceTo(V);
-    const double P1VDistance = curve.P0.DistanceTo(V);
-    const double P1P4Distance = curve.P0.DistanceTo(curve.P3);
-    const FloatPoint G = (P2VDistance * curve.P0 + P1VDistance * curve.P3 + P1P4Distance * V) / (P2VDistance + P1VDistance + P1P4Distance);
+    const double P3VDistance = curve.P3.DistanceTo(V);
+    const double P0VDistance = curve.P0.DistanceTo(V);
+    const double P0P3Distance = curve.P0.DistanceTo(curve.P3);
+    const FloatPoint G = (P3VDistance * curve.P0 + P0VDistance * curve.P3 + P0P3Distance * V) / (P3VDistance + P0VDistance + P0P3Distance);
 
-    const FloatLine P1G(curve.P0, G);
-    const FloatLine GP4(G, curve.P3);
+    const FloatLine P0G(curve.P0, G);
+    const FloatLine GP3(G, curve.P3);
 
-    const FloatLine E(P1G.MidPoint(), P1G.MidPoint() - P1G.NormalVector());
+    const FloatLine E(P0G.MidPoint(), P0G.MidPoint() - P0G.NormalVector());
     const FloatLine E1(d.StartTangent.P0, d.StartTangent.P0 -
         d.StartTangent.NormalVector());
 
@@ -766,7 +766,7 @@ static bool TryArcApproximation(const CubicCurve &curve,
         return false;
     }
 
-    const FloatLine F(GP4.MidPoint(), GP4.MidPoint() - GP4.NormalVector());
+    const FloatLine F(GP3.MidPoint(), GP3.MidPoint() - GP3.NormalVector());
     const FloatLine F1(d.EndTangent.P0, d.EndTangent.P0 +
         d.EndTangent.NormalVector());
 
@@ -822,8 +822,8 @@ static bool IsCurveApproximatelyStraight(const CurveTangentData &d)
 
     const double x1 = d.StartTangent.X1();
     const double y1 = d.StartTangent.Y1();
-    const double x3 = d.EndTangent.X1();
-    const double y3 = d.EndTangent.Y1();
+    const double x2 = d.EndTangent.X1();
+    const double y2 = d.EndTangent.Y1();
 
     return
         // Is P1 located between P0 and P3?
@@ -832,10 +832,10 @@ static bool IsCurveApproximatelyStraight(const CurveTangentData &d)
         maxx >= x1 and
         maxy >= y1 and
         // Is P2 located between P0 and P3?
-        minx <= x3 and
-        miny <= y3 and
-        maxx >= x3 and
-        maxy >= y3 and
+        minx <= x2 and
+        miny <= y2 and
+        maxx >= x2 and
+        maxy >= y2 and
         // Are all points collinear?
         IsZeroWithEpsilon(d.Turn1,
             ApproximatelyStraightCurveTestApsilon) and

@@ -115,14 +115,14 @@ function findCubicRoots(coe0, coe1, coe2, coe3) {
     if (R2subQ3 < 0.0) {
         const theta = Math.acos(clamp(R / Math.sqrt(Q3), -1.0, 1.0));
         const negative2RootQ = -2.0 * Math.sqrt(Q);
-        const x1 = negative2RootQ * Math.cos(theta / 3.0) - adiv3;
-        const x2 =
+        const x0 = negative2RootQ * Math.cos(theta / 3.0) - adiv3;
+        const x1 =
             negative2RootQ * Math.cos((theta + 2.0 * Math.PI) / 3.0) - adiv3;
-        const x3 =
+        const x2 =
             negative2RootQ * Math.cos((theta - 2.0 * Math.PI) / 3.0) - adiv3;
-        let roots = acceptRoot(x1);
+        let roots = acceptRoot(x0);
+        roots = roots.concat(acceptRoot(x1));
         roots = roots.concat(acceptRoot(x2));
-        roots = roots.concat(acceptRoot(x3));
         roots.sort();
         return deduplicateFloatArray(roots);
     }
@@ -254,16 +254,16 @@ class FloatLine {
         this.P0 = p0;
         this.P1 = p1;
     }
-    x1() {
+    x0() {
         return this.P0.X;
     }
-    y1() {
+    y0() {
         return this.P0.Y;
     }
-    x2() {
+    x1() {
         return this.P1.X;
     }
-    y2() {
+    y1() {
         return this.P1.Y;
     }
     dx() {
@@ -764,14 +764,14 @@ function findUnitCubicCurveForArc(p0, p3) {
     const q2 = q1 + ax * bx + ay * by;
     const k2 =
         ((4.0 / 3.0) * (Math.sqrt(2.0 * q1 * q2) - q2)) / (ax * by - ay * bx);
-    const x2 = p0.X - k2 * p0.Y;
-    const y2 = p0.Y + k2 * p0.X;
-    const x3 = p3.X + k2 * p3.Y;
-    const y3 = p3.Y - k2 * p3.X;
+    const x1 = p0.X - k2 * p0.Y;
+    const y1 = p0.Y + k2 * p0.X;
+    const x2 = p3.X + k2 * p3.Y;
+    const y2 = p3.Y - k2 * p3.X;
     return new CubicCurve(
         p0,
+        new FloatPoint(x1, y1),
         new FloatPoint(x2, y2),
-        new FloatPoint(x3, y3),
         p3,
     );
 }
@@ -1054,21 +1054,21 @@ function tryArcApproximation(curve, d, builder, offset, maximumError) {
     ) {
         return false;
     }
-    const P2VDistance = curve.P3.distanceTo(V);
-    const P1VDistance = curve.P0.distanceTo(V);
-    const P1P4Distance = curve.P0.distanceTo(curve.P3);
-    const G = curve.P0.multiplyScalar(P2VDistance)
+    const P3VDistance = curve.P3.distanceTo(V);
+    const P0VDistance = curve.P0.distanceTo(V);
+    const P0P3Distance = curve.P0.distanceTo(curve.P3);
+    const G = curve.P0.multiplyScalar(P3VDistance)
         .plus(
-            curve.P3.multiplyScalar(P1VDistance).plus(
-                V.multiplyScalar(P1P4Distance),
+            curve.P3.multiplyScalar(P0VDistance).plus(
+                V.multiplyScalar(P0P3Distance),
             ),
         )
-        .divideScalar(P2VDistance + P1VDistance + P1P4Distance);
-    const P1G = new FloatLine(curve.P0, G);
-    const GP4 = new FloatLine(G, curve.P3);
+        .divideScalar(P3VDistance + P0VDistance + P0P3Distance);
+    const P0G = new FloatLine(curve.P0, G);
+    const GP3 = new FloatLine(G, curve.P3);
     const E = new FloatLine(
-        P1G.midPoint(),
-        P1G.midPoint().minus(P1G.normalVector()),
+        P0G.midPoint(),
+        P0G.midPoint().minus(P0G.normalVector()),
     );
     const E1 = new FloatLine(
         d.startTangent.P0,
@@ -1088,8 +1088,8 @@ function tryArcApproximation(curve, d, builder, offset, maximumError) {
         return false;
     }
     const F = new FloatLine(
-        GP4.midPoint(),
-        GP4.midPoint().minus(GP4.normalVector()),
+        GP3.midPoint(),
+        GP3.midPoint().minus(GP3.normalVector()),
     );
     const F1 = new FloatLine(
         d.endTangent.P0,
@@ -1127,23 +1127,23 @@ function tryArcApproximation(curve, d, builder, offset, maximumError) {
     return false;
 }
 function isCurveApproximatelyStraight(d) {
-    const minx = Math.min(d.startTangent.x1(), d.endTangent.x1());
-    const miny = Math.min(d.startTangent.y1(), d.endTangent.y1());
-    const maxx = Math.max(d.startTangent.x1(), d.endTangent.x1());
-    const maxy = Math.max(d.startTangent.y1(), d.endTangent.y1());
-    const x2 = d.startTangent.x2();
-    const y2 = d.startTangent.y2();
-    const x3 = d.endTangent.x2();
-    const y3 = d.endTangent.y2();
+    const minx = Math.min(d.startTangent.x0(), d.endTangent.x0());
+    const miny = Math.min(d.startTangent.y0(), d.endTangent.y0());
+    const maxx = Math.max(d.startTangent.x0(), d.endTangent.x0());
+    const maxy = Math.max(d.startTangent.y0(), d.endTangent.y0());
+    const x1 = d.startTangent.x1();
+    const y1 = d.startTangent.y1();
+    const x2 = d.endTangent.x1();
+    const y2 = d.endTangent.y1();
     return (
+        minx <= x1 &&
+        miny <= y1 &&
+        maxx >= x1 &&
+        maxy >= y1 &&
         minx <= x2 &&
         miny <= y2 &&
         maxx >= x2 &&
         maxy >= y2 &&
-        minx <= x3 &&
-        miny <= y3 &&
-        maxx >= x3 &&
-        maxy >= y3 &&
         isZeroWithEpsilon(d.turn1, ApproximatelyStraightCurveTestApsilon) &&
         isZeroWithEpsilon(d.turn2, ApproximatelyStraightCurveTestApsilon)
     );

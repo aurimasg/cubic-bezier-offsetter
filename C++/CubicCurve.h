@@ -23,13 +23,13 @@ public:
     /**
      * Constructs cubic curve with given points.
      */
-    constexpr CubicCurve(const double p1x, const double p1y, const double p2x,
-        const double p2y, const double p3x, const double p3y,
-        const double p4x, const double p4y)
-    :   P0(p1x, p1y),
-        P1(p2x, p2y),
-        P2(p3x, p3y),
-        P3(p4x, p4y)
+    constexpr CubicCurve(const double p0x, const double p0y, const double p1x,
+        const double p1y, const double p2x, const double p2y,
+        const double p3x, const double p3y)
+    :   P0(p0x, p0y),
+        P1(p1x, p1y),
+        P2(p2x, p2y),
+        P3(p3x, p3y)
     {
     }
 

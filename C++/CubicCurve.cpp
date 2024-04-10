@@ -352,11 +352,11 @@ static int FindCubicRoots(const double coe0, const double coe1, const double coe
 
         const double x0 = negative2RootQ * Cos(theta / 3.0) - adiv3;
         const double x1 = negative2RootQ * Cos((theta + 2.0 * M_PI) / 3.0) - adiv3;
-        const double x3 = negative2RootQ * Cos((theta - 2.0 * M_PI) / 3.0) - adiv3;
+        const double x2 = negative2RootQ * Cos((theta - 2.0 * M_PI) / 3.0) - adiv3;
 
         int n = AcceptRoot(roots, x0);
         n += AcceptRoot(roots + n, x1);
-        n += AcceptRoot(roots + n, x3);
+        n += AcceptRoot(roots + n, x2);
 
         Quicksort(roots, n, [](const double a, const double b) -> bool {
             return a < b;

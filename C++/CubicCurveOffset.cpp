@@ -4,9 +4,9 @@
 
 
 /**
- * A maximum number of iterations for searching closest point to cusp that has
- * the first derivative long enough for finding start or end points of
- * circular arc for cusp.
+ * A maximum number of iterations for searching for the closest point to cusp
+ * that has the first derivative long enough for finding start or end points
+ * of a circular arc for cusp.
  *
  * Smaller value means faster search, but worse accuracy when handling
  * cusp-like points of the curve.
@@ -15,10 +15,10 @@ static constexpr int NearCuspPointSearchMaxIterationCount = 18;
 
 
 /**
- * After an attempt to find offset curve is made, squared lengths of all edges
- * of polygon enclosing curve is calculated and added together. If this length
- * is equal to or less that this number, resulting curve will be discarded
- * immediadely without attempt to add it to the output.
+ * After an attempt to find an offset curve is made, squared lengths of all
+ * edges of the polygon enclosing curve is calculated and added together. If
+ * this length is equal to or less than this number, the resulting curve will
+ * be discarded immediately without attempting to add it to the output.
  *
  * Smaller value means smaller curves will be accepted for output.
  */
@@ -27,9 +27,9 @@ static constexpr double MaximumTinyCurvePolygonPerimeterSquared = 1e-7;
 
 /**
  * If a good circular arc approximation of a curve is found, but its radius is
- * very close to offset amount, scaled arc can collapse to a point or almost a
- * point. This is epsilon for testing if arc is large enough. Arcs with radius
- * smaller than this value will not be added to the output.
+ * very close to the offset amount, the scaled arc can collapse to a point or
+ * almost a point. This is an epsilon for testing if the arc is large enough.
+ * Arcs with radius smaller than this value will not be added to the output.
  *
  * Smaller value means smaller arcs will be accepted for output.
  */
@@ -46,7 +46,8 @@ static constexpr double MaximumArcRadius = 1e+6;
 
 /**
  * Offsetter does not attempt to find exact cusp locations and does not
- * consider cusp only to be where derivative vector length is exactly zero.
+ * consider cusp only to be where the derivative vector length is exactly
+ * zero.
  *
  * Smaller values means that sharper curve edges are considered cusps.
  */
@@ -55,7 +56,7 @@ static constexpr double CuspDerivativeLengthSquared = 1.5e-4;
 
 /**
  * If X and Y components of all points are equal when compared with this
- * epsilon, curve is considered a point.
+ * epsilon, the curve is considered a point.
  */
 static constexpr double CurvePointClumpTestEpsilon = 1e-14;
 

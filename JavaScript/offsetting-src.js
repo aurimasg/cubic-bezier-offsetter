@@ -1,8 +1,8 @@
 
 /**
- * A maximum number of iterations for searching closest point to cusp that has
- * the first derivative long enough for finding start or end points of
- * circular arc for cusp.
+ * A maximum number of iterations for searching for the closest point to cusp
+ * that has the first derivative long enough for finding start or end points
+ * of a circular arc for cusp.
  *
  * Smaller value means faster search, but worse accuracy when handling
  * cusp-like points of the curve.
@@ -11,10 +11,10 @@ const NearCuspPointSearchMaxIterationCount = 18;
 
 
 /**
- * After an attempt to find offset curve is made, squared lengths of all edges
- * of polygon enclosing curve is calculated and added together. If this length
- * is equal to or less that this number, resulting curve will be discarded
- * immediadely without attempt to add it to the output.
+ * After an attempt to find an offset curve is made, squared lengths of all
+ * edges of the polygon enclosing curve is calculated and added together. If
+ * this length is equal to or less than this number, the resulting curve will
+ * be discarded immediately without attempting to add it to the output.
  *
  * Smaller value means smaller curves will be accepted for output.
  */
@@ -23,9 +23,9 @@ const MaximumTinyCurvePolygonPerimeterSquared = 1e-7;
 
 /**
  * If a good circular arc approximation of a curve is found, but its radius is
- * very close to offset amount, scaled arc can collapse to a point or almost a
- * point. This is epsilon for testing if arc is large enough. Arcs with radius
- * smaller than this value will not be added to the output.
+ * very close to the offset amount, the scaled arc can collapse to a point or
+ * almost a point. This is an epsilon for testing if the arc is large enough.
+ * Arcs with radius smaller than this value will not be added to the output.
  *
  * Smaller value means smaller arcs will be accepted for output.
  */
@@ -42,7 +42,8 @@ const MaximumArcRadius = 1e+6;
 
 /**
  * Offsetter does not attempt to find exact cusp locations and does not
- * consider cusp only to be where derivative vector length is exactly zero.
+ * consider cusp only to be where the derivative vector length is exactly
+ * zero.
  *
  * Smaller values means that sharper curve edges are considered cusps.
  */
@@ -51,7 +52,7 @@ const CuspDerivativeLengthSquared = 1.5e-4;
 
 /**
  * If X and Y components of all points are equal when compared with this
- * epsilon, curve is considered a point.
+ * epsilon, the curve is considered a point.
  */
 const CurvePointClumpTestEpsilon = 1e-14;
 
@@ -192,8 +193,6 @@ function clamp(val: number, min: number, max: number): number {
  * If t is something else, returns value linearly interpolated between A and B.
  */
 function interpolateLinear(A: number, B: number, t: number): number {
-    //ASSERT(t >= 0);
-    //ASSERT(t <= 1);
     return A + ((B - A) * t);
 }
 
@@ -576,8 +575,6 @@ class FloatPoint {
      * point and at given point.
      */
     lerp(to: FloatPoint, t: number): FloatPoint {
-        //ASSERT(t >= 0);
-        //ASSERT(t <= 1);
         return this.plus(to.minus(this).multiplyScalar(t));
     }
 
@@ -1366,8 +1363,6 @@ class CubicCurve {
      * t0.
      */
     getSubcurve(t0: number, t1: number): CubicCurve {
-        //ASSERT(t0 <= t1);
-
         if (fuzzyIsEqual(t0, t1)) {
             const p = this.pointAt(t0);
 
@@ -2051,8 +2046,6 @@ function mergeCurvePositions(array: Array<number>, na: Array<number>, epsilon: n
  * @param circleRadius Circle radius. Must not be negative.
  */
 function lineCircleIntersect(line: FloatLine, circleCenter: FloatPoint, circleRadius: number): boolean {
-    //ASSERT(circleRadius >= 0);
-
     const d = line.P1.minus(line.P0);
     const g = line.P0.minus(circleCenter);
     const a = d.dot(d);
@@ -2312,8 +2305,6 @@ function approximateBezier(curve: CubicCurve, d: CurveTangentData, builder: Outp
 
 
 function findPositionOnCurveWithLargeEnoughDerivative(curve: CubicCurve, previousT: number, currentT: number): number {
-    // ASSERT(currentT > previousT);
-
     const kPrecision = CuspDerivativeLengthSquared * 2.0;
 
     let t = Math.max(interpolateLinear(previousT, currentT, 0.8), currentT - 0.05);
@@ -2336,8 +2327,6 @@ function findPositionOnCurveWithLargeEnoughDerivative(curve: CubicCurve, previou
 
 
 function findPositionOnCurveWithLargeEnoughDerivativeStart(curve: CubicCurve, currentT: number, nextT: number): number {
-    // ASSERT(currentT < nextT);
-
     const kPrecision = CuspDerivativeLengthSquared * 2.0;
 
     let t = Math.min(interpolateLinear(currentT, nextT, 0.2), currentT + 0.05);
@@ -2454,8 +2443,6 @@ function doApproximateBezier(curve: CubicCurve, d: CurveTangentData, builder: Ou
                 const t1 = findPositionOnCurveWithLargeEnoughDerivative(
                     curve, previousT, T);
 
-                // ASSERT(t1 < T);
-
                 const k = curve.getSubcurve(previousT, t1);
                 const nd = new CurveTangentData(k);
 
@@ -2463,8 +2450,6 @@ function doApproximateBezier(curve: CubicCurve, d: CurveTangentData, builder: Ou
 
                 const t2 = findPositionOnCurveWithLargeEnoughDerivativeStart(
                     curve, T, i == (t.length - 1) ? 1.0 : t[i + 1]);
-
-                // ASSERT(t2 > T);
 
                 builder.cuspPoint = curve.pointAt(T);
                 builder.needsCuspArc = true;
@@ -2484,8 +2469,6 @@ function doApproximateBezier(curve: CubicCurve, d: CurveTangentData, builder: Ou
                 previousT = T;
             }
         }
-
-        // ASSERT(previousT < 1.0);
 
         const k = curve.getSubcurve(previousT, 1.0);
         const nd = new CurveTangentData(k);
